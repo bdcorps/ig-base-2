@@ -42,7 +42,7 @@ export const BackgroundSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("image"),
-    imageId: z.string().describe("Id of an image produced by the generateImage tool."),
+    imageId: z.string().describe("Id returned by generateImage or generateSticker."),
     fit: z.enum(["cover", "contain"]).default("cover"),
     overlay: ColorSchema.optional().describe("Optional color overlay for legibility."),
     overlayOpacity: z.number().min(0).max(1).default(0).describe("Overlay opacity 0-1."),
@@ -86,7 +86,7 @@ export const ImageElementSchema = z.object({
   kind: z.literal("image"),
   ...positionFields,
   height: z.number(),
-  imageId: z.string().describe("Id of an image produced by the generateImage tool."),
+  imageId: z.string().describe("Id returned by generateImage or generateSticker."),
   fit: z.enum(["cover", "contain"]).default("cover"),
   borderRadius: z.number().default(0),
 });
@@ -129,7 +129,7 @@ export type AgentDesign = z.infer<typeof AgentDesignSchema>;
 
 /**
  * The full design used by the renderer. `images` is populated server-side after
- * the generateImage tool runs (the model only references images by id).
+ * the generateImage / generateSticker tools run (the model only references images by id).
  */
 export const SlideDesignSchema = AgentDesignSchema.extend({
   images: z

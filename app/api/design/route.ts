@@ -1,5 +1,5 @@
 import { examples } from "@/exa";
-import { generateImage, type ImageAspect } from "@/lib/gemini";
+import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -36,6 +36,7 @@ Build the slide by calling tools in this strict order:
 2. setSolidBackground / setGradientBackground / setImageBackground — call exactly ONE to define the slide background.
 3. For each visual element (top-to-bottom), call addTextElement, addShapeElement, or addImageElement ONCE per element.
 4. If a photo/image is needed: call generateImage FIRST to get an imageId, THEN call addImageElement (or setImageBackground) referencing that imageId.
+5. If a sticker/cutout/illustration with transparent background is needed: call generateSticker FIRST to get an imageId, THEN call addImageElement with fit:"contain".
 
 CANVAS & MARGINS
 - All coordinates and sizes are px within the ${CANVAS_WIDTH}x${CANVAS_HEIGHT} canvas.
@@ -56,6 +57,7 @@ NO OVERLAP — lay elements out top-to-bottom (this is the most important rule)
 FOLLOW THE BRIEF LITERALLY
 - If the brief specifies exact text for a label, heading, or subtitle, use that text VERBATIM (do not paraphrase or invent a catchier hook). Include every piece the user asked for (e.g. a small top label/eyebrow, the heading, the subtitle).
 - If the brief explicitly asks for a picture/photo/image of something (e.g. "put a picture of a smiling lady"), you MUST call the generateImage tool to create it and place it as an image element. If it mentions an arrow pointing at something, either include the arrow in the image prompt or add a small rotated text "→" element near it.
+- If the brief asks for a sticker, emoji-style icon, cutout, or illustration that should float over the slide (transparent background), call generateSticker — NOT generateImage. Place with addImageElement and fit:"contain".
 
 COLOR & FONTS (use SEMANTIC TOKENS so palettes can be swapped)
 - Element colors must be one of the tokens "background", "text", or "accent".
@@ -86,7 +88,7 @@ SMALL LABELS / EYEBROWS — use accent pills with light text (different from CTA
 
 ELEMENTS
 - text: headline, optional sub-headline, optional small italic callout, CTA chip. Use the text element's "background" field for any colored pill behind it.
-- image: use the generateImage tool first, then reference it by the returned imageId. Person cutouts read well anchored to a bottom corner; keep text clear of the image area.
+- image: use generateImage for photos/backgrounds, or generateSticker for transparent cutouts/stickers. Person cutouts read well anchored to a bottom corner; keep text clear of the image area. Stickers MUST use fit:"contain".
 - shape: rect/pill/circle ONLY for standalone decorative elements — accent bars, dividers, badges with no text on top.
 - don't use too many dividers, use them sparingly.
 
@@ -94,8 +96,10 @@ COPYWRITING
 - Write punchy slide copy from the brief (a hook headline + a short supporting line is typical).
 - IMPORTANT: write the copy in the SAME LANGUAGE as the user's brief.
 
-IMAGES
-- Only call generateImage when the design genuinely needs a photo. Many strong slides are pure type on a solid/gradient background — don't force an image. At most 2 images.
+IMAGES & STICKERS
+- generateImage: photographic images and full-bleed backgrounds.
+- generateSticker: isolated subjects with transparent background (person cutouts, emoji-style icons, decorative stickers). Always place stickers with fit:"contain".
+- Only call image tools when the design genuinely needs them. Many strong slides are pure type — don't force images. At most 2 images/stickers combined.
 
 TOOL CALLING — IMPORTANT
 - Do NOT output any JSON or plain text. Use tools EXCLUSIVELY to build the slide.
@@ -168,17 +172,42 @@ function buildFewShotMessages(): ModelMessage[] {
 
 const FEW_SHOT_MESSAGES = buildFewShotMessages();
 
+interface UserImageInput {
+  dataUrl: string;
+  name?: string;
+}
+
+function parseUserImages(raw: unknown): UserImageInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (item): item is UserImageInput =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as UserImageInput).dataUrl === "string" &&
+        (item as UserImageInput).dataUrl.startsWith("data:image/"),
+    )
+    .slice(0, 8);
+}
+
 export async function POST(request: Request) {
   let prompt: string;
+  let userImages: UserImageInput[] = [];
   try {
     const body = await request.json();
     prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    userImages = parseUserImages(body?.userImages);
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   if (!prompt) {
     return Response.json({ error: "Missing 'prompt'" }, { status: 400 });
   }
+
+  const userImageNote =
+    userImages.length > 0
+      ? `\n\nUSER-PROVIDED PHOTOS: The user uploaded ${userImages.length} photo(s) pre-registered as ${userImages.map((_, i) => `user_${i + 1}`).join(", ")}. When the design should feature the user's own photos (headshot, product, team, etc.), use addImageElement or setImageBackground with those imageIds directly — do NOT call generateImage for them.`
+      : "";
 
   const encoder = new TextEncoder();
 
@@ -191,19 +220,29 @@ export async function POST(request: Request) {
       const images = new Map<string, { dataUrl: string; prompt: string }>();
       let imageCounter = 0;
 
+      userImages.forEach((img, i) => {
+        const id = `user_${i + 1}`;
+        const label = img.name?.trim() || `User photo ${i + 1}`;
+        images.set(id, { dataUrl: img.dataUrl, prompt: label });
+        emit({
+          type: "image",
+          data: { imageId: id, dataUrl: img.dataUrl, prompt: label },
+        });
+      });
+
       try {
         await generateText({
           model: anthropic(MODEL),
           system: SYSTEM_PROMPT,
           messages: [
             ...FEW_SHOT_MESSAGES,
-            { role: "user", content: prompt },
+            { role: "user", content: prompt + userImageNote },
           ],
           tools: {
             // ── Image generation ──────────────────────────────────────────
             generateImage: tool({
               description:
-                "Generate a photographic image (person cutout, product, or background) for the slide. Call this BEFORE the addImageElement that references the imageId.",
+                "Generate a photographic image (person photo, product shot, or full-bleed background) for the slide. Call this BEFORE addImageElement or setImageBackground that references the imageId. Do NOT use for stickers/cutouts — use generateSticker instead.",
               inputSchema: z.object({
                 prompt: z
                   .string()
@@ -232,6 +271,44 @@ export async function POST(request: Request) {
                       err instanceof Error
                         ? err.message
                         : "Image generation failed",
+                  };
+                }
+              },
+            }),
+
+            generateSticker: tool({
+              description:
+                "Generate a sticker/illustration with a transparent background (person cutout, emoji-style icon, decorative sticker). Call BEFORE addImageElement — then place with fit:\"contain\". Do NOT use for full-bleed photo backgrounds.",
+              inputSchema: z.object({
+                prompt: z
+                  .string()
+                  .describe(
+                    "Detailed description of the sticker subject (isolated, no background scene).",
+                  ),
+                aspect: z
+                  .enum(["portrait", "landscape", "square"])
+                  .default("square")
+                  .describe("Aspect ratio — square works best for most stickers."),
+              }),
+              execute: async ({ prompt: stickerPrompt, aspect }) => {
+                const id = `sticker_${++imageCounter}`;
+                try {
+                  const { dataUrl } = await generateSticker(
+                    stickerPrompt,
+                    aspect as ImageAspect,
+                  );
+                  images.set(id, { dataUrl, prompt: stickerPrompt });
+                  emit({
+                    type: "image",
+                    data: { imageId: id, dataUrl, prompt: stickerPrompt },
+                  });
+                  return { imageId: id };
+                } catch (err) {
+                  return {
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : "Sticker generation failed",
                   };
                 }
               },
@@ -330,7 +407,7 @@ export async function POST(request: Request) {
 
             addImageElement: tool({
               description:
-                "Add a photo/image element to the slide. Call generateImage first to get the imageId.",
+                "Add a photo/image/sticker element to the slide. Call generateImage or generateSticker first to get the imageId. Use fit:\"contain\" for stickers.",
               inputSchema: ImageElementSchema,
               execute: async (element) => {
                 emit({ type: "element", data: element });
@@ -348,9 +425,9 @@ export async function POST(request: Request) {
               },
             }),
           },
-          // palette + background + up to ~12 elements + up to 2 images
-          // (each needing a generateImage call before addImageElement).
-          stopWhen: stepCountIs(30),
+          // palette + background + up to ~12 elements + up to 2 images/stickers
+          // (each needing a generateImage/generateSticker call before addImageElement).
+          stopWhen: stepCountIs(32),
         });
 
         emit({ type: "done" });

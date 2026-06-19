@@ -1,8 +1,9 @@
 import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
+import { removeChromakey } from "@/lib/chromakey";
 
 /**
- * Generate an image with Gemini 3.1 Flash Image and return it as a base64 data
- * URL. Used by the design agent's generateImage tool.
+ * Generate images with Gemini 3.1 Flash Image and return base64 data URLs.
+ * Used by the design agent's generateImage / generateSticker tools.
  *
  * Requires GEMINI_API_KEY in the environment.
  */
@@ -65,4 +66,27 @@ export async function generateImage(
   }
 
   throw new Error("Gemini returned no image data");
+}
+
+const STICKER_CHROMAKEY_PROMPT = `Create a sticker-style illustration on a SOLID CHROMAKEY GREEN background (#00FF00).
+
+CRITICAL CHROMAKEY REQUIREMENTS:
+- The entire background must be pure flat #00FF00 green — no gradients, textures, or shadows on the background.
+- Do NOT put green on the subject edges; keep the subject cleanly separated from the background.
+- Single isolated subject with crisp edges, suitable for cutout compositing.
+- No checkerboard or fake transparency patterns.
+
+Subject: `;
+
+/**
+ * Generate a sticker (isolated subject) and return a transparent PNG data URL.
+ * Gemini cannot emit real alpha, so we generate on chromakey green and strip it.
+ */
+export async function generateSticker(
+  prompt: string,
+  aspect: ImageAspect = "square",
+): Promise<{ dataUrl: string }> {
+  const { dataUrl } = await generateImage(STICKER_CHROMAKEY_PROMPT + prompt, aspect);
+  const transparent = await removeChromakey(dataUrl);
+  return { dataUrl: transparent };
 }
