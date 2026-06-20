@@ -54,7 +54,7 @@ export default function TemplatesPage() {
           </div>
         </div>
 
-        <section className="mb-10 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <section className="mb-10 rounded-2xl border border-neutral-200 bg-white p-6">
           <label htmlFor="context-prompt" className="mb-2 block text-sm font-semibold text-neutral-900">
             Your carousel idea
           </label>

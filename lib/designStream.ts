@@ -1,12 +1,15 @@
 import type { DesignEvent } from "@/app/api/design/route";
-import type { Background, SlideDesign, SlideElement, Theme } from "@/lib/schema";
 import { DEFAULT_THEME } from "@/lib/fonts";
+import {
+  applyDesignEvent,
+  emptySlideState,
+  type SlideState,
+} from "@/lib/slideState";
 
 export type DesignStreamUpdate =
-  | { type: "palette"; theme: Theme }
-  | { type: "design"; design: SlideDesign }
+  | { type: "slides"; slides: SlideState[]; activeIndex: number }
   | { type: "error"; message: string }
-  | { type: "done" };
+  | { type: "done"; slideCount: number };
 
 export interface UserImageInput {
   dataUrl: string;
@@ -18,6 +21,7 @@ export async function consumeDesignStream(
   onUpdate: (update: DesignStreamUpdate) => void,
   signal?: AbortSignal,
   userImages?: UserImageInput[],
+  slideCount?: number,
 ): Promise<void> {
   const res = await fetch("/api/design", {
     method: "POST",
@@ -25,6 +29,7 @@ export async function consumeDesignStream(
     body: JSON.stringify({
       prompt,
       userImages: userImages?.length ? userImages : undefined,
+      slideCount,
     }),
     signal,
   });
@@ -34,14 +39,11 @@ export async function consumeDesignStream(
     throw new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`);
   }
 
-  let theme: Theme = { ...DEFAULT_THEME };
-  let design: SlideDesign = {
-    background: { type: "solid", color: "background" },
-    elements: [],
-    images: {},
-  };
+  let slides: SlideState[] = [];
+  let activeIndex = 0;
 
-  const emitDesign = () => onUpdate({ type: "design", design });
+  const emitSlides = () =>
+    onUpdate({ type: "slides", slides: [...slides], activeIndex });
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -64,40 +66,101 @@ export async function consumeDesignStream(
         continue;
       }
 
-      if (event.type === "palette") {
-        theme = { ...theme, palette: event.data };
-        onUpdate({ type: "palette", theme });
+      if (event.type === "slideStart") {
+        activeIndex = event.data.index;
+        slides = applyDesignEvent(slides, {
+          type: "slideStart",
+          data: event.data,
+        });
+        emitSlides();
+      } else if (event.type === "palette") {
+        slides = applyDesignEvent(slides, {
+          type: "palette",
+          slideIndex: event.slideIndex,
+          data: event.data,
+        });
+        activeIndex = event.slideIndex;
+        emitSlides();
       } else if (event.type === "background") {
-        design = {
-          ...design,
-          background: event.data as Background,
-        };
-        emitDesign();
+        slides = applyDesignEvent(slides, {
+          type: "background",
+          slideIndex: event.slideIndex,
+          data: event.data,
+        });
+        activeIndex = event.slideIndex;
+        emitSlides();
       } else if (event.type === "element") {
-        design = {
-          ...design,
-          elements: [...design.elements, event.data as SlideElement],
-        };
-        emitDesign();
+        slides = applyDesignEvent(slides, {
+          type: "element",
+          slideIndex: event.slideIndex,
+          data: event.data,
+        });
+        activeIndex = event.slideIndex;
+        emitSlides();
       } else if (event.type === "image") {
-        const { imageId, dataUrl, prompt: imgPrompt } = event.data;
-        design = {
-          ...design,
-          images: {
-            ...design.images,
-            [imageId]: { dataUrl, prompt: imgPrompt },
-          },
-        };
-        emitDesign();
+        slides = applyDesignEvent(slides, {
+          type: "image",
+          data: event.data,
+        });
+        emitSlides();
       } else if (event.type === "error") {
         onUpdate({ type: "error", message: event.message });
         return;
       } else if (event.type === "done") {
-        onUpdate({ type: "done" });
+        if (slides.length === 0) {
+          slides = [emptySlideState()];
+        }
+        onUpdate({ type: "done", slideCount: event.slideCount });
         return;
       }
     }
   }
 
-  onUpdate({ type: "done" });
+  if (slides.length === 0) {
+    slides = [emptySlideState()];
+  }
+  onUpdate({ type: "done", slideCount: slides.length });
+}
+
+/** Legacy single-slide consumer — returns the first slide's design + theme. */
+export async function consumeDesignStreamLegacy(
+  prompt: string,
+  onUpdate: (update: {
+    type: "palette";
+    theme: SlideState["theme"];
+  } | {
+    type: "design";
+    design: SlideState["design"];
+  } | {
+    type: "error";
+    message: string;
+  } | {
+    type: "done";
+  }) => void,
+  signal?: AbortSignal,
+  userImages?: UserImageInput[],
+): Promise<void> {
+  let theme: SlideState["theme"] = { ...DEFAULT_THEME };
+  let design = emptySlideState().design;
+
+  await consumeDesignStream(
+    prompt,
+    (update) => {
+      if (update.type === "slides") {
+        const slide = update.slides[update.activeIndex] ?? update.slides[0];
+        if (slide) {
+          theme = slide.theme;
+          design = slide.design;
+          onUpdate({ type: "palette", theme });
+          onUpdate({ type: "design", design });
+        }
+      } else if (update.type === "error") {
+        onUpdate({ type: "error", message: update.message });
+      } else if (update.type === "done") {
+        onUpdate({ type: "done" });
+      }
+    },
+    signal,
+    userImages,
+  );
 }

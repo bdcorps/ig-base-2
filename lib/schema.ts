@@ -167,6 +167,12 @@ export interface Theme {
   fonts: Fonts;
 }
 
+export interface PaletteOption {
+  id: string;
+  name: string;
+  palette: Palette;
+}
+
 /** Resolve a schema color (token or hex) to a concrete CSS color. */
 export function resolveColor(color: Color | undefined, palette: Palette): string | undefined {
   if (color == null) return undefined;

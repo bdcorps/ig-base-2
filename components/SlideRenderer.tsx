@@ -16,6 +16,8 @@ interface Props {
   theme: Theme;
   /** Rendered width in px; the 1080x1350 canvas is scaled to fit. */
   displayWidth?: number;
+  /** Strip chrome (radius) for PNG export. */
+  forExport?: boolean;
   /** Enable drag-to-move / resize / selection editing. */
   editable?: boolean;
   selectedIndex?: number | null;
@@ -27,6 +29,7 @@ export default function SlideRenderer({
   design,
   theme,
   displayWidth = 400,
+  forExport = false,
   editable = false,
   selectedIndex = null,
   onSelect,
@@ -37,13 +40,13 @@ export default function SlideRenderer({
 
   return (
     <div
+      data-slide-export=""
       style={{
         width: displayWidth,
         height: displayHeight,
         position: "relative",
         overflow: "hidden",
-        borderRadius: 12 * scale,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.25)",
+        ...(forExport ? {} : { borderRadius: 12 * scale }),
       }}
     >
       <div

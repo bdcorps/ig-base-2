@@ -24,6 +24,10 @@ export const examples: DesignExample[] = [
       "Q&A carousel: How to start a business from scratch (if you've never done it before). Friendly, approachable.",
     toolCalls: [
       {
+        tool: "startSlide",
+        args: { slideNumber: 1, role: "hook" },
+      },
+      {
         tool: "setPalette",
         args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D" },
       },

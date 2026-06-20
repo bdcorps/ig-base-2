@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { consumeDesignStream } from "@/lib/designStream";
+import { consumeDesignStreamLegacy } from "@/lib/designStream";
 import {
   createKanbanJob,
   deriveKanbanStage,
@@ -28,7 +28,7 @@ export function useKanbanJobs() {
       abortControllers.current.set(job.id, controller);
 
       try {
-        await consumeDesignStream(
+        await consumeDesignStreamLegacy(
           job.prompt,
           (update) => {
             if (update.type === "palette") {

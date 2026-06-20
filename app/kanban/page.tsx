@@ -162,6 +162,7 @@ export default function KanbanPage() {
                     <Controls
                       theme={selectedTheme}
                       onChange={(t) => setThemeForJob(selected.id, t)}
+                      variant="embedded"
                     />
                   </div>
                 )}

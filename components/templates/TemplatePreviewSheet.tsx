@@ -1,7 +1,7 @@
 "use client";
 
 import type { CarouselTemplate } from "@/lib/templates";
-import { consumeDesignStream } from "@/lib/designStream";
+import { consumeDesignStreamLegacy } from "@/lib/designStream";
 import { saveEditorSession } from "@/lib/editorSession";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import type { SlideDesign, Theme } from "@/lib/schema";
@@ -93,7 +93,7 @@ export default function TemplatePreviewSheet({
     };
 
     try {
-      await consumeDesignStream(
+      await consumeDesignStreamLegacy(
         prompt.trim(),
         (update) => {
           if (update.type === "palette") theme = update.theme;
@@ -125,7 +125,7 @@ export default function TemplatePreviewSheet({
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
       />
 
-      <div className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white">
         <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
           <div>
             <h2 className="text-lg font-bold text-neutral-900">{template.title}</h2>
@@ -142,7 +142,7 @@ export default function TemplatePreviewSheet({
 
         <div className="grid flex-1 overflow-hidden lg:grid-cols-[320px_1fr]">
           <div className="flex items-center justify-center border-b border-neutral-200 bg-neutral-50 p-6 lg:border-b-0 lg:border-r">
-            <div className="relative aspect-9/16 w-full max-w-[280px] overflow-hidden rounded-2xl shadow-lg ring-1 ring-black/5">
+            <div className="relative aspect-9/16 w-full max-w-[280px] overflow-hidden rounded-2xl ring-1 ring-black/5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={template.previewImage}
@@ -155,7 +155,7 @@ export default function TemplatePreviewSheet({
                 </span>
               )}
               {template.isNew && (
-                <span className="absolute left-3 top-3 -rotate-6 rounded-md bg-[#FFD60A] px-2 py-0.5 text-[11px] font-bold text-neutral-900 shadow">
+                <span className="absolute left-3 top-3 -rotate-6 rounded-md bg-[#FFD60A] px-2 py-0.5 text-[11px] font-bold text-neutral-900">
                   New!
                 </span>
               )}
@@ -195,7 +195,7 @@ export default function TemplatePreviewSheet({
                   : "border-neutral-200 bg-neutral-50 hover:border-neutral-300 hover:bg-white"
               }`}
             >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white">
                 <UploadIcon />
               </div>
               <p className="text-sm font-medium text-neutral-800">

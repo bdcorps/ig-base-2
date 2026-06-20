@@ -1,0 +1,401 @@
+import { DEFAULT_THEME, PRESET_PALETTES } from "@/lib/fonts";
+import type { Generation } from "@/lib/generations";
+import type { PaletteOption, SlideDesign, Theme } from "@/lib/schema";
+import type { SlideState } from "@/lib/slideState";
+
+const SAMPLE_PROMPT =
+  "5-slide Q&A carousel: How to start a business from scratch (if you've never done it before). Friendly, approachable.";
+
+const PORTRAIT_DATA_URL = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="520" viewBox="0 0 400 520">
+    <rect fill="#d4c4b0" width="400" height="520"/>
+    <circle cx="200" cy="150" r="72" fill="#b8956a"/>
+    <ellipse cx="200" cy="400" rx="115" ry="140" fill="#b8956a"/>
+  </svg>`,
+)}`;
+
+const SAMPLE_PALETTES: PaletteOption[] = PRESET_PALETTES.map((entry, i) => ({
+  id: `sample-palette-${i}`,
+  name: entry.name,
+  palette: entry.palette,
+}));
+
+function theme(paletteIndex = 0): Theme {
+  return {
+    palette: PRESET_PALETTES[paletteIndex].palette,
+    fonts: { ...DEFAULT_THEME.fonts },
+  };
+}
+
+function slide1(): SlideState {
+  const design: SlideDesign = {
+    palette: PRESET_PALETTES[0].palette,
+    background: { type: "solid", color: "background" },
+    images: {
+      hero: { dataUrl: PORTRAIT_DATA_URL, prompt: "Friendly entrepreneur portrait" },
+    },
+    elements: [
+      {
+        kind: "text",
+        x: 80,
+        y: 80,
+        width: 320,
+        rotation: 0,
+        content: "Q&A",
+        font: "body",
+        fontSize: 28,
+        fontWeight: 500,
+        color: "background",
+        align: "center",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        background: "accent",
+        paddingX: 22,
+        paddingY: 10,
+        borderRadius: 32,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 180,
+        width: 920,
+        rotation: 0,
+        content: "How to start a business from scratch",
+        font: "heading",
+        fontSize: 72,
+        fontWeight: 700,
+        color: "text",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 360,
+        width: 720,
+        rotation: 0,
+        content: "(even if you've never done it before)",
+        font: "body",
+        fontSize: 40,
+        fontWeight: 400,
+        color: "text",
+        align: "left",
+        italic: true,
+        uppercase: false,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "image",
+        x: 620,
+        y: 720,
+        width: 380,
+        height: 520,
+        rotation: 0,
+        imageId: "hero",
+        fit: "contain",
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 410,
+        y: 1150,
+        width: 260,
+        rotation: 0,
+        content: "Swipe →",
+        font: "body",
+        fontSize: 40,
+        fontWeight: 500,
+        color: "text",
+        align: "center",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        background: "accent",
+        paddingX: 56,
+        paddingY: 16,
+        borderRadius: 999,
+      },
+    ],
+  };
+
+  return { design, theme: theme(0) };
+}
+
+function slide2(): SlideState {
+  const design: SlideDesign = {
+    palette: PRESET_PALETTES[0].palette,
+    background: {
+      type: "gradient",
+      from: "background",
+      to: "accent",
+      angle: 160,
+    },
+    images: {},
+    elements: [
+      {
+        kind: "shape",
+        x: 80,
+        y: 120,
+        width: 8,
+        height: 120,
+        rotation: 0,
+        variant: "rect",
+        color: "accent",
+        borderRadius: 4,
+      },
+      {
+        kind: "text",
+        x: 110,
+        y: 120,
+        width: 120,
+        rotation: 0,
+        content: "01",
+        font: "heading",
+        fontSize: 64,
+        fontWeight: 700,
+        color: "accent",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 280,
+        width: 920,
+        rotation: 0,
+        content: "Start with a problem you actually care about",
+        font: "heading",
+        fontSize: 64,
+        fontWeight: 700,
+        color: "text",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.15,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 480,
+        width: 860,
+        rotation: 0,
+        content:
+          "The best businesses solve real pain. Talk to 10 people who have the problem before you build anything.",
+        font: "body",
+        fontSize: 36,
+        fontWeight: 400,
+        color: "text",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.35,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+    ],
+  };
+
+  return { design, theme: theme(0) };
+}
+
+function slide3(): SlideState {
+  const design: SlideDesign = {
+    palette: PRESET_PALETTES[0].palette,
+    background: { type: "solid", color: "background" },
+    images: {},
+    elements: [
+      {
+        kind: "text",
+        x: 80,
+        y: 140,
+        width: 920,
+        rotation: 0,
+        content: "From $0 to $300K MRR",
+        segments: [
+          { text: "From " },
+          { text: "$0", color: "accent" },
+          { text: " to " },
+          { text: "$300K MRR", color: "accent" },
+        ],
+        font: "heading",
+        fontSize: 80,
+        fontWeight: 700,
+        color: "text",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 340,
+        width: 820,
+        rotation: 0,
+        content: "She hacked virality and got 500M monthly views — here's the playbook.",
+        font: "body",
+        fontSize: 38,
+        fontWeight: 400,
+        color: "text",
+        align: "left",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.3,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "shape",
+        x: 80,
+        y: 560,
+        width: 920,
+        height: 4,
+        rotation: 0,
+        variant: "rect",
+        color: "accent",
+        borderRadius: 2,
+      },
+      {
+        kind: "text",
+        x: 80,
+        y: 620,
+        width: 860,
+        rotation: 0,
+        content: "Post consistently. Test hooks. Double down on what gets saves.",
+        font: "body",
+        fontSize: 34,
+        fontWeight: 400,
+        color: "text",
+        align: "left",
+        italic: true,
+        uppercase: false,
+        lineHeight: 1.35,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+    ],
+  };
+
+  return { design, theme: theme(0) };
+}
+
+function slide4(): SlideState {
+  const design: SlideDesign = {
+    palette: PRESET_PALETTES[0].palette,
+    background: { type: "solid", color: "background" },
+    images: {},
+    elements: [
+      {
+        kind: "text",
+        x: 80,
+        y: 200,
+        width: 920,
+        rotation: 0,
+        content: "Ready to start?",
+        font: "heading",
+        fontSize: 88,
+        fontWeight: 700,
+        color: "text",
+        align: "center",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 140,
+        y: 380,
+        width: 800,
+        rotation: 0,
+        content: "Save this carousel and follow for more startup tips every week.",
+        font: "body",
+        fontSize: 36,
+        fontWeight: 400,
+        color: "text",
+        align: "center",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.35,
+        letterSpacing: 0,
+        paddingX: 0,
+        paddingY: 0,
+        borderRadius: 0,
+      },
+      {
+        kind: "text",
+        x: 410,
+        y: 620,
+        width: 260,
+        rotation: 0,
+        content: "Follow",
+        font: "body",
+        fontSize: 40,
+        fontWeight: 500,
+        color: "text",
+        align: "center",
+        italic: false,
+        uppercase: false,
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        background: "accent",
+        paddingX: 56,
+        paddingY: 16,
+        borderRadius: 999,
+      },
+    ],
+  };
+
+  return { design, theme: theme(0) };
+}
+
+export function createSampleGeneration(): Generation {
+  return {
+    id: crypto.randomUUID(),
+    prompt: SAMPLE_PROMPT,
+    slideCount: 4,
+    status: "complete",
+    slides: [slide1(), slide2(), slide3(), slide4()],
+    activeSlideIndex: 0,
+    generatedPalettes: SAMPLE_PALETTES,
+    activePaletteId: SAMPLE_PALETTES[0].id,
+    error: null,
+    createdAt: Date.now(),
+  };
+}

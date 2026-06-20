@@ -12,7 +12,7 @@ export default function TemplateCard({ template, onSelect }: TemplateCardProps) 
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className="group relative aspect-[2/3] w-full overflow-hidden rounded-[20px] text-left shadow-sm ring-1 ring-black/5 transition-all hover:-translate-y-0.5 hover:shadow-md"
+      className="group relative aspect-[2/3] w-full overflow-hidden rounded-[20px] text-left ring-1 ring-black/5 transition-all hover:-translate-y-0.5"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -43,7 +43,7 @@ export default function TemplateCard({ template, onSelect }: TemplateCardProps) 
       )}
 
       {template.isNew && (
-        <span className="absolute left-3 top-3 -rotate-6 rounded-md bg-[#FFD60A] px-2 py-0.5 text-[11px] font-bold text-neutral-900 shadow">
+        <span className="absolute left-3 top-3 -rotate-6 rounded-md bg-[#FFD60A] px-2 py-0.5 text-[11px] font-bold text-neutral-900">
           New!
         </span>
       )}

@@ -1,4 +1,9 @@
 import { examples } from "@/exa";
+import {
+  formatPaletteBrief,
+  generateColourPalette,
+  toDesignPalette,
+} from "@/lib/colorGenerator";
 import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
 import {
   CANVAS_HEIGHT,
@@ -7,8 +12,9 @@ import {
   PaletteSchema,
   ShapeElementSchema,
   TextElementSchema,
+  type PaletteOption,
 } from "@/lib/schema";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
@@ -16,27 +22,27 @@ import { z } from "zod";
 // Image generation can take a while; allow a generous budget.
 export const maxDuration = 120;
 
-const MODEL = process.env.DESIGN_MODEL ?? "claude-sonnet-4-6";
+const MODEL = process.env.DESIGN_MODEL ?? "gemini-2.5-pro";
 
-// Some environments export ANTHROPIC_BASE_URL without the trailing "/v1"
-// (e.g. "https://api.anthropic.com"), which makes the SDK request
-// ".../messages" and 404. Normalize it so it always ends in "/v1".
-function normalizedBaseURL(): string | undefined {
-  const raw = process.env.ANTHROPIC_BASE_URL?.replace(/\/+$/, "");
-  if (!raw) return undefined;
-  return raw.endsWith("/v1") ? raw : `${raw}/v1`;
-}
+const gemini = createGoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
-const anthropic = createAnthropic({ baseURL: normalizedBaseURL() });
+const SYSTEM_PROMPT = `You are an expert social-media carousel slide designer. Given a brief, you design a complete Instagram carousel — MULTIPLE slides on a fixed ${CANVAS_WIDTH}x${CANVAS_HEIGHT} canvas (portrait 4:5).
 
-const SYSTEM_PROMPT = `You are an expert social-media carousel slide designer. Given a brief, you design ONE Instagram carousel slide on a fixed ${CANVAS_WIDTH}x${CANVAS_HEIGHT} canvas (portrait 4:5).
+CAROUSEL STRUCTURE
+- Design every slide the brief calls for (typically 3-8 slides). If a slide count is specified, match it exactly.
+- Typical flow: hook slide → 2-5 content/tip slides → optional CTA/closing slide.
+- Keep a cohesive visual system across slides: reuse the same palette tokens and font roles; vary layout and copy per slide.
+- Each slide is independent — call startSlide before building each one.
 
-Build the slide by calling tools in this strict order:
-1. setPalette — call this FIRST with concrete hex values.
-2. setSolidBackground / setGradientBackground / setImageBackground — call exactly ONE to define the slide background.
-3. For each visual element (top-to-bottom), call addTextElement, addShapeElement, or addImageElement ONCE per element.
-4. If a photo/image is needed: call generateImage FIRST to get an imageId, THEN call addImageElement (or setImageBackground) referencing that imageId.
-5. If a sticker/cutout/illustration with transparent background is needed: call generateSticker FIRST to get an imageId, THEN call addImageElement with fit:"contain".
+Build EACH slide by calling tools in this strict order:
+1. startSlide — call FIRST for every slide (slideNumber 1, 2, 3, …).
+2. setPalette — call with concrete hex values (reuse the same palette across slides unless the brief asks otherwise).
+3. setSolidBackground / setGradientBackground / setImageBackground — call exactly ONE to define the slide background.
+4. For each visual element (top-to-bottom), call addTextElement, addShapeElement, or addImageElement ONCE per element.
+5. If a photo/image is needed: call generateImage FIRST to get an imageId, THEN call addImageElement (or setImageBackground) referencing that imageId.
+6. If a sticker/cutout/illustration with transparent background is needed: call generateSticker FIRST to get an imageId, THEN call addImageElement with fit:"contain".
 
 CANVAS & MARGINS
 - All coordinates and sizes are px within the ${CANVAS_WIDTH}x${CANVAS_HEIGHT} canvas.
@@ -102,10 +108,11 @@ IMAGES & STICKERS
 - Only call image tools when the design genuinely needs them. Many strong slides are pure type — don't force images. At most 2 images/stickers combined.
 
 TOOL CALLING — IMPORTANT
-- Do NOT output any JSON or plain text. Use tools EXCLUSIVELY to build the slide.
-- Always call setPalette → one background tool → element tools in that order.
+- Do NOT output any JSON or plain text. Use tools EXCLUSIVELY to build the carousel.
+- For each slide: startSlide → setPalette → one background tool → element tools in that order.
 - Use addTextElement for text, addShapeElement for shapes, addImageElement for photos.
-- NEVER use a shape as a text background. Use the text element's own "background" + paddingX/paddingY/borderRadius fields instead.`;
+- NEVER use a shape as a text background. Use the text element's own "background" + paddingX/paddingY/borderRadius fields instead.
+- Finish ALL slides before stopping — do not stop after the first slide.`;
 
 // ---------------------------------------------------------------------------
 // Streaming event types emitted as NDJSON lines to the client.
@@ -123,15 +130,34 @@ type ImageBg = {
 };
 
 export type DesignEvent =
-  | { type: "palette"; data: z.infer<typeof PaletteSchema> }
-  | { type: "background"; data: SolidBg | GradientBg | ImageBg }
-  | { type: "element"; data: z.infer<typeof TextElementSchema> | z.infer<typeof ImageElementSchema> | z.infer<typeof ShapeElementSchema> }
+  | { type: "slideStart"; data: { index: number; role?: string } }
+  | { type: "palette"; data: z.infer<typeof PaletteSchema>; slideIndex: number }
+  | {
+    type: "background";
+    data: SolidBg | GradientBg | ImageBg;
+    slideIndex: number;
+  }
+  | {
+    type: "element";
+    data:
+    | z.infer<typeof TextElementSchema>
+    | z.infer<typeof ImageElementSchema>
+    | z.infer<typeof ShapeElementSchema>;
+    slideIndex: number;
+  }
   | {
     type: "image";
     data: { imageId: string; dataUrl: string; prompt: string };
   }
+  | {
+      type: "paletteOptions";
+      data: {
+        palettes: PaletteOption[];
+        selectedPaletteId: string | null;
+      };
+    }
   | { type: "error"; message: string }
-  | { type: "done" };
+  | { type: "done"; slideCount: number };
 
 /**
  * Build few-shot messages from the examples. Each tool call becomes an
@@ -190,19 +216,49 @@ function parseUserImages(raw: unknown): UserImageInput[] {
     .slice(0, 8);
 }
 
+function parseSlideCount(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const n = Math.round(raw);
+  if (n < 1 || n > 12) return undefined;
+  return n;
+}
+
 export async function POST(request: Request) {
   let prompt: string;
   let userImages: UserImageInput[] = [];
+  let slideCount: number | undefined;
   try {
     const body = await request.json();
     prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     userImages = parseUserImages(body?.userImages);
+    slideCount = parseSlideCount(body?.slideCount);
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   if (!prompt) {
     return Response.json({ error: "Missing 'prompt'" }, { status: 400 });
   }
+
+  let enforcedPalette: z.infer<typeof PaletteSchema> | null = null;
+  let paletteBrief = "";
+  let paletteOptions: PaletteOption[] = [];
+
+  try {
+    const colourResult = await generateColourPalette(prompt);
+    enforcedPalette = toDesignPalette(colourResult.selectedPalette);
+    paletteBrief = formatPaletteBrief(colourResult.selectedPalette);
+    paletteOptions = colourResult.palettes.map((palette) => ({
+      id: palette.id,
+      name: palette.name,
+      palette: toDesignPalette(palette),
+    }));
+  } catch (err) {
+    console.warn("colour palette pre-generation failed", err);
+  }
+
+  const slideCountNote = slideCount
+    ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides. Call startSlide for slides 1 through ${slideCount}.`
+    : "\n\nSLIDE COUNT: Infer the number of slides from the brief (typically 3-8). Call startSlide before each slide.";
 
   const userImageNote =
     userImages.length > 0
@@ -219,6 +275,13 @@ export async function POST(request: Request) {
 
       const images = new Map<string, { dataUrl: string; prompt: string }>();
       let imageCounter = 0;
+      let currentSlideIndex = 0;
+      let slideCountEmitted = 0;
+
+      const slideScoped = <T extends Record<string, unknown>>(data: T) => ({
+        ...data,
+        slideIndex: currentSlideIndex,
+      });
 
       userImages.forEach((img, i) => {
         const id = `user_${i + 1}`;
@@ -230,15 +293,53 @@ export async function POST(request: Request) {
         });
       });
 
+      if (paletteOptions.length > 0) {
+        emit({
+          type: "paletteOptions",
+          data: {
+            palettes: paletteOptions,
+            selectedPaletteId: paletteOptions[0]?.id ?? null,
+          },
+        });
+      }
+
       try {
         await generateText({
-          model: anthropic(MODEL),
+          model: gemini(MODEL),
           system: SYSTEM_PROMPT,
           messages: [
             ...FEW_SHOT_MESSAGES,
-            { role: "user", content: prompt + userImageNote },
+            { role: "user", content: prompt + slideCountNote + userImageNote + paletteBrief },
           ],
           tools: {
+            startSlide: tool({
+              description:
+                "Begin a new carousel slide. Call this FIRST before setPalette for each slide (slideNumber 1, 2, 3, …).",
+              inputSchema: z.object({
+                slideNumber: z
+                  .number()
+                  .int()
+                  .min(1)
+                  .max(12)
+                  .describe("1-based slide index in the carousel."),
+                role: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "Optional slide role, e.g. 'hook', 'tip 2', 'CTA'.",
+                  ),
+              }),
+              execute: async ({ slideNumber, role }) => {
+                currentSlideIndex = slideNumber - 1;
+                slideCountEmitted = Math.max(slideCountEmitted, slideNumber);
+                emit({
+                  type: "slideStart",
+                  data: { index: currentSlideIndex, role },
+                });
+                return { ok: true, slideNumber };
+              },
+            }),
+
             // ── Image generation ──────────────────────────────────────────
             generateImage: tool({
               description:
@@ -320,7 +421,8 @@ export async function POST(request: Request) {
                 "Set the slide color palette. Call this FIRST — before any background or element tool.",
               inputSchema: PaletteSchema,
               execute: async (palette) => {
-                emit({ type: "palette", data: palette });
+                const applied = enforcedPalette ?? palette;
+                emit(slideScoped({ type: "palette", data: applied }));
                 return { ok: true };
               },
             }),
@@ -339,7 +441,12 @@ export async function POST(request: Request) {
                   ),
               }),
               execute: async ({ color }) => {
-                emit({ type: "background", data: { type: "solid", color } });
+                emit(
+                  slideScoped({
+                    type: "background",
+                    data: { type: "solid", color },
+                  }),
+                );
                 return { ok: true };
               },
             }),
@@ -358,10 +465,12 @@ export async function POST(request: Request) {
                   .describe("Gradient angle in degrees (180 = top-to-bottom)."),
               }),
               execute: async ({ from, to, angle }) => {
-                emit({
-                  type: "background",
-                  data: { type: "gradient", from, to, angle },
-                });
+                emit(
+                  slideScoped({
+                    type: "background",
+                    data: { type: "gradient", from, to, angle },
+                  }),
+                );
                 return { ok: true };
               },
             }),
@@ -386,10 +495,12 @@ export async function POST(request: Request) {
                   .describe("Overlay opacity 0-1."),
               }),
               execute: async ({ imageId, fit, overlay, overlayOpacity }) => {
-                emit({
-                  type: "background",
-                  data: { type: "image", imageId, fit, overlay, overlayOpacity },
-                });
+                emit(
+                  slideScoped({
+                    type: "background",
+                    data: { type: "image", imageId, fit, overlay, overlayOpacity },
+                  }),
+                );
                 return { ok: true };
               },
             }),
@@ -400,7 +511,7 @@ export async function POST(request: Request) {
                 "Add a text element (headline, sub-headline, callout, CTA chip) to the slide. Call once per element, top-to-bottom.",
               inputSchema: TextElementSchema,
               execute: async (element) => {
-                emit({ type: "element", data: element });
+                emit(slideScoped({ type: "element", data: element }));
                 return { ok: true };
               },
             }),
@@ -410,7 +521,7 @@ export async function POST(request: Request) {
                 "Add a photo/image/sticker element to the slide. Call generateImage or generateSticker first to get the imageId. Use fit:\"contain\" for stickers.",
               inputSchema: ImageElementSchema,
               execute: async (element) => {
-                emit({ type: "element", data: element });
+                emit(slideScoped({ type: "element", data: element }));
                 return { ok: true };
               },
             }),
@@ -420,17 +531,17 @@ export async function POST(request: Request) {
                 "Add a shape (rect, pill, or circle) to the slide — accent bars, dividers, badges.",
               inputSchema: ShapeElementSchema,
               execute: async (element) => {
-                emit({ type: "element", data: element });
+                emit(slideScoped({ type: "element", data: element }));
                 return { ok: true };
               },
             }),
           },
-          // palette + background + up to ~12 elements + up to 2 images/stickers
-          // (each needing a generateImage/generateSticker call before addImageElement).
-          stopWhen: stepCountIs(32),
+          // Per slide: startSlide + palette + background + ~12 elements + images.
+          // Budget scales with requested slide count (default up to ~6 slides).
+          stopWhen: stepCountIs(Math.min(160, 28 + (slideCount ?? 6) * 24)),
         });
 
-        emit({ type: "done" });
+        emit({ type: "done", slideCount: Math.max(slideCountEmitted, 1) });
       } catch (err) {
         console.error("design generation failed", err);
         emit({
