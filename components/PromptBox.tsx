@@ -3,7 +3,98 @@
 import { ArrowUp } from "lucide-react";
 
 const EXAMPLE_PROMPTS = [
-  "5-slide Q&A carousel: How to start a business from scratch (if you've never done it before). Friendly, approachable.",
+  `Create a personal brand 4-slide carousel for Sukhpal Saini, a founder of a personal branding agency.
+  
+  Style: Modern, high-contrast, founder/personal brand aesthetic. Clean layouts, bold headlines, minimal clutter. Use purple accents. Include subtle branding with @itssukhpalsaini on every slide.
+
+Slide 1 — Cover
+
+Headline:
+How to Start a Personal Brand (Without Overthinking It)
+
+Subheadline:
+A simple roadmap that actually works.
+
+Footer:
+Sukhpal Saini | Founder | @itssukhpalsaini
+
+Visual:
+Large title with a creator/founder aesthetic and subtle social icons.
+
+Slide 2 — Stop Trying to Go Viral
+
+Headline:
+Step 1: Stop trying to go viral
+
+Body:
+Most people fail because they optimize for views instead of trust.
+
+You don't need millions of followers.
+
+You need a small audience that knows:
+
+• What you do
+• What you know
+• Why they should listen
+
+Consistency beats virality.
+
+Visual:
+Viral graph fading vs trust graph rising steadily.
+
+Slide 3 — Pick One Topic
+
+Headline:
+Step 2: Become known for one thing
+
+Body:
+Don't talk about everything.
+
+Choose one topic people will associate with your name.
+
+Examples:
+
+• SaaS growth
+• AI tools
+• Design
+• Fitness
+• Finance
+• Career advice
+
+People follow specialists before they follow personalities.
+
+Quote Highlight:
+Clarity creates authority.
+
+Slide 4 — What Happened When I Started
+
+Headline:
+My personal brand changed everything
+
+Body:
+Sharing what I was building led to:
+
+• New friendships
+
+• Customers
+
+• Opportunities
+
+• Speaking invitations
+
+• A bigger network
+
+You never know who's watching.
+
+Start before you feel ready.
+
+Footer:
+Sukhpal Saini
+Founder
+@itssukhpalsaini
+
+CTA:
+Follow @itssukhpalsaini for more founder and personal branding insights.`,
   "4-slide carousel: This girl went from zero to $300k MRR by hacking virality and got 500M monthly views.",
   "3-slide premium minimalist carousel for an independent optician. Why expert eyewear beats a chain store.",
 ];

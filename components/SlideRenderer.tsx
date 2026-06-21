@@ -17,6 +17,7 @@ import {
   type StackElement,
   type Theme,
 } from "@/lib/schema";
+import { normalizeTextNewlines } from "@/lib/textContent";
 
 interface Props {
   design: SlideDesign;
@@ -915,16 +916,24 @@ function textContentStyle(element: TextElementLike, theme: Theme): React.CSSProp
   };
 }
 
-function TextContent({ element, theme }: { element: TextElementLike; theme: Theme }) {
+function TextContent({
+  element,
+  theme,
+}: {
+  element: TextElementLike;
+  theme: Theme;
+}) {
+  const hasSegments = Boolean(element.segments && element.segments.length > 0);
+
   return (
     <div style={textContentStyle(element, theme)}>
-      {element.segments && element.segments.length > 0
-        ? element.segments.map((seg, i) => (
+      {hasSegments
+        ? element.segments!.map((seg, i) => (
             <span key={i} style={{ color: resolveColor(seg.color, theme.palette) }}>
-              {seg.text}
+              {normalizeTextNewlines(seg.text)}
             </span>
           ))
-        : element.content}
+        : normalizeTextNewlines(element.content)}
     </div>
   );
 }
@@ -944,11 +953,12 @@ function EditableTextContent({
 }) {
   const [editing, setEditing] = useState(false);
   const editRef = useRef<HTMLDivElement>(null);
-  const draftRef = useRef(element.content);
+  const displayContent = normalizeTextNewlines(element.content);
+  const draftRef = useRef(displayContent);
 
   useEffect(() => {
-    if (!editing) draftRef.current = element.content;
-  }, [element.content, editing]);
+    if (!editing) draftRef.current = displayContent;
+  }, [displayContent, editing]);
 
   useEffect(() => {
     if (!editing || !editRef.current) return;
@@ -964,7 +974,7 @@ function EditableTextContent({
   const commit = () => {
     const next = editRef.current?.innerText ?? draftRef.current;
     setEditing(false);
-    if (next !== element.content) {
+    if (next !== displayContent) {
       onEditBegin?.();
       onContentChange(next);
     }
@@ -972,7 +982,7 @@ function EditableTextContent({
 
   const cancel = () => {
     setEditing(false);
-    if (editRef.current) editRef.current.innerText = element.content;
+    if (editRef.current) editRef.current.innerText = displayContent;
   };
 
   if (!editable) {
@@ -1006,7 +1016,7 @@ function EditableTextContent({
           userSelect: "text",
         }}
       >
-        {element.content}
+        {displayContent}
       </div>
     );
   }
@@ -1015,7 +1025,7 @@ function EditableTextContent({
     <div
       onDoubleClick={(e) => {
         e.stopPropagation();
-        draftRef.current = element.content;
+        draftRef.current = displayContent;
         setEditing(true);
       }}
       title="Double-click to edit"
@@ -1024,10 +1034,10 @@ function EditableTextContent({
       {element.segments && element.segments.length > 0
         ? element.segments.map((seg, i) => (
             <span key={i} style={{ color: resolveColor(seg.color, theme.palette) }}>
-              {seg.text}
+              {normalizeTextNewlines(seg.text)}
             </span>
           ))
-        : element.content}
+        : displayContent}
     </div>
   );
 }

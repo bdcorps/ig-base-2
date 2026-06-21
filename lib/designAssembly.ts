@@ -3,6 +3,7 @@ import type { PaletteOption } from "@/lib/schema";
 import {
   applyDesignEvent,
   emptySlideState,
+  filterEmptySlides,
   type SlideState,
 } from "@/lib/slideState";
 
@@ -51,10 +52,12 @@ export function assembleDesignFromEvents(events: DesignEvent[]): AssembledDesign
     }
   }
 
+  const nonEmptySlides = filterEmptySlides(slides);
+
   return {
-    slides,
+    slides: nonEmptySlides.length > 0 ? nonEmptySlides : slides,
     paletteOptions,
     activePaletteId,
-    slideCount: slideCount || slides.length,
+    slideCount: nonEmptySlides.length || slideCount || slides.length,
   };
 }

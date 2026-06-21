@@ -48,7 +48,7 @@ export default function Home() {
           onClick={handleOpenSample}
           className="mt-6 text-[13px] text-neutral-400 transition-colors hover:text-neutral-600"
         >
-          Open sample design
+          See demo
         </button>
       </div>
     </div>

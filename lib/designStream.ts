@@ -3,6 +3,7 @@ import { DEFAULT_THEME } from "@/lib/fonts";
 import {
   applyDesignEvent,
   emptySlideState,
+  filterEmptySlides,
   type SlideState,
 } from "@/lib/slideState";
 
@@ -109,7 +110,13 @@ export async function consumeDesignStream(
       } else if (event.type === "done") {
         if (slides.length === 0) {
           slides = [emptySlideState()];
+        } else {
+          const pruned = filterEmptySlides(slides);
+          if (pruned.length > 0) {
+            slides = pruned;
+          }
         }
+        emitSlides();
         onUpdate({ type: "done", slideCount: event.slideCount });
         return;
       }
@@ -118,6 +125,11 @@ export async function consumeDesignStream(
 
   if (slides.length === 0) {
     slides = [emptySlideState()];
+  } else {
+    const pruned = filterEmptySlides(slides);
+    if (pruned.length > 0) {
+      slides = pruned;
+    }
   }
   onUpdate({ type: "done", slideCount: slides.length });
 }

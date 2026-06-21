@@ -2,6 +2,7 @@ import type { DesignEvent } from "@/lib/designEvents";
 import {
   applyDesignEvent,
   emptySlideState,
+  filterEmptySlides,
   type SlideState,
 } from "@/lib/slideState";
 import type { Generation } from "@/lib/generations";
@@ -108,8 +109,13 @@ export async function streamDesign(
       } else if (event.type === "done") {
         if (currentSlides.length === 0) {
           currentSlides = [emptySlideState()];
-          onUpdate({ slides: currentSlides });
+        } else {
+          const pruned = filterEmptySlides(currentSlides);
+          if (pruned.length > 0) {
+            currentSlides = pruned;
+          }
         }
+        onUpdate({ slides: [...currentSlides] });
       }
     }
   }

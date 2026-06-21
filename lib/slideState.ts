@@ -21,6 +21,14 @@ export function emptySlideState(): SlideState {
   };
 }
 
+export function slideHasContent(slide: SlideState): boolean {
+  return slide.design.elements.length > 0;
+}
+
+export function filterEmptySlides(slides: SlideState[]): SlideState[] {
+  return slides.filter(slideHasContent);
+}
+
 export function ensureSlideSlot(
   slides: SlideState[],
   index: number,

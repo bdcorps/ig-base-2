@@ -122,17 +122,20 @@ TOOL CALLING — IMPORTANT
 - For each slide: startSlide → setPalette → one background tool → element tools in that order.
 - Use addStackElement for grouped vertical/horizontal content, addTextElement for standalone text, addShapeElement for shapes, addImageElement for photos.
 - NEVER use a shape as a text background. Use the text element's own "background" + paddingX/paddingY/borderRadius fields instead.
-- Finish ALL slides before stopping — do not stop after the first slide.`;
+- Finish ALL slides before stopping — do not stop after the first slide.
+- SLIDE COMPLETION: Every slide MUST have at least one element (addStackElement or addTextElement) before you call startSlide for the next slide. Do NOT call startSlide(N+1) until slide N has visible content. Slide 1 is always the hook — never skip it or leave it background-only.
+- SLIDE ORDER: Call startSlide in strict sequence (1, then 2, then 3, …). Never jump ahead.`;
 
 function buildFewShotMessages(): ModelMessage[] {
   const messages: ModelMessage[] = [];
 
-  for (const ex of examples) {
+  for (let exIdx = 0; exIdx < examples.length; exIdx++) {
+    const ex = examples[exIdx];
     messages.push({ role: "user", content: ex.brief });
 
     for (let i = 0; i < ex.toolCalls.length; i++) {
       const tc = ex.toolCalls[i];
-      const id = `fs_${i}`;
+      const id = `fs_${exIdx}_${i}`;
       messages.push({
         role: "assistant",
         content: [
@@ -237,6 +240,14 @@ export async function runDesignGeneration(
   let imageCounter = 0;
   let currentSlideIndex = 0;
   let slideCountEmitted = 0;
+  const slideElementCounts = new Map<number, number>();
+
+  const markSlideContent = () => {
+    slideElementCounts.set(
+      currentSlideIndex,
+      (slideElementCounts.get(currentSlideIndex) ?? 0) + 1,
+    );
+  };
 
   const slideScoped = <T extends Record<string, unknown>>(data: T) => ({
     ...data,
@@ -274,7 +285,7 @@ export async function runDesignGeneration(
       tools: {
         startSlide: tool({
           description:
-            "Begin a new carousel slide. Call this FIRST before setPalette for each slide (slideNumber 1, 2, 3, …).",
+            "Begin a new carousel slide. Call this FIRST before setPalette for each slide (slideNumber 1, 2, 3, …). Slides must be started in order. Do not call this for slide N+1 until slide N has at least one element.",
           inputSchema: z.object({
             slideNumber: z
               .number()
@@ -288,6 +299,21 @@ export async function runDesignGeneration(
               .describe("Optional slide role, e.g. 'hook', 'tip 2', 'CTA'."),
           }),
           execute: async ({ slideNumber, role }) => {
+            if (slideNumber > slideCountEmitted + 1) {
+              return {
+                error: `Call startSlide for slide ${slideCountEmitted + 1} first — slides must be started in order (1, 2, 3, …).`,
+              };
+            }
+
+            if (slideNumber > 1) {
+              const prevIndex = slideNumber - 2;
+              if ((slideElementCounts.get(prevIndex) ?? 0) === 0) {
+                return {
+                  error: `Slide ${slideNumber - 1} has no content yet. Add at least one element (addStackElement or addTextElement) before starting slide ${slideNumber}.`,
+                };
+              }
+            }
+
             currentSlideIndex = slideNumber - 1;
             slideCountEmitted = Math.max(slideCountEmitted, slideNumber);
             emit({
@@ -456,6 +482,7 @@ export async function runDesignGeneration(
           inputSchema: TextElementSchema,
           execute: async (element) => {
             emit(slideScoped({ type: "element", data: element }));
+            markSlideContent();
             return { ok: true };
           },
         }),
@@ -466,6 +493,7 @@ export async function runDesignGeneration(
           inputSchema: ImageElementSchema,
           execute: async (element) => {
             emit(slideScoped({ type: "element", data: element }));
+            markSlideContent();
             return { ok: true };
           },
         }),
@@ -476,6 +504,7 @@ export async function runDesignGeneration(
           inputSchema: ShapeElementSchema,
           execute: async (element) => {
             emit(slideScoped({ type: "element", data: element }));
+            markSlideContent();
             return { ok: true };
           },
         }),
@@ -486,6 +515,7 @@ export async function runDesignGeneration(
           inputSchema: StackElementSchema,
           execute: async (element) => {
             emit(slideScoped({ type: "element", data: element }));
+            markSlideContent();
             return { ok: true };
           },
         }),
@@ -493,7 +523,11 @@ export async function runDesignGeneration(
       stopWhen: stepCountIs(Math.min(160, 28 + (slideCount ?? 6) * 24)),
     });
 
-    emit({ type: "done", slideCount: Math.max(slideCountEmitted, 1) });
+    const assembled = assembleDesignFromEvents([
+      ...recordedEvents,
+      { type: "done", slideCount: slideCountEmitted },
+    ]);
+    emit({ type: "done", slideCount: assembled.slideCount });
     await savePromptOutput();
   } catch (err) {
     console.error("design generation failed", err);
@@ -505,8 +539,13 @@ export async function runDesignGeneration(
     throw err;
   }
 
+  const finalAssembly = assembleDesignFromEvents([
+    ...recordedEvents,
+    { type: "done", slideCount: slideCountEmitted },
+  ]);
+
   return {
-    slideCount: Math.max(slideCountEmitted, 1),
+    slideCount: finalAssembly.slideCount,
     paletteOptions,
   };
 }
