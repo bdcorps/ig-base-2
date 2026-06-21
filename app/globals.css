@@ -4,18 +4,18 @@
   --background: #fafafa;
   --foreground: #141414;
   --text-base: #141414;
-  --text-primary: rgb(from var(--text-base) r g b / 0.74);
-  --text-secondary: rgb(from var(--text-base) r g b / 0.6);
-  --text-tertiary: rgb(from var(--text-base) r g b / 0.36);
+  --primary: rgb(from var(--text-base) r g b / 0.74);
+  --secondary: rgb(from var(--text-base) r g b / 0.6);
+  --tertiary: rgb(from var(--text-base) r g b / 0.36);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-text-base: var(--text-base);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
+  --color-text-base: var(--base);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-inter);
 }

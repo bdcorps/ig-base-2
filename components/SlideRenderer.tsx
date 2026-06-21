@@ -5,7 +5,7 @@ import {
   snapPosition,
   type SnapGuides,
 } from "@/lib/snapGuides";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
@@ -208,6 +208,18 @@ type DragState = {
   oy: number;
   ow: number;
   oh: number;
+  /** When true, ox/oy/ow/oh track the visible contained image, not the element box. */
+  containResize?: boolean;
+  aspectRatio?: number;
+};
+
+type StackChildDragState = {
+  sx: number;
+  sy: number;
+  ow: number;
+  oh: number;
+  containResize?: boolean;
+  aspectRatio?: number;
 };
 
 function selectableCursor(editable: boolean, hovered: boolean, dragging: boolean): React.CSSProperties["cursor"] {
@@ -215,6 +227,45 @@ function selectableCursor(editable: boolean, hovered: boolean, dragging: boolean
   if (dragging) return "grabbing";
   if (hovered) return "pointer";
   return "default";
+}
+
+/** Load an image (typically a data URL) and report its intrinsic dimensions. */
+function useImageNaturalSize(src: string | undefined): { w: number; h: number } | null {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!src) {
+      setSize(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) setSize({ w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+  return size;
+}
+
+/** The rect actually painted by `object-fit: contain` inside a box. */
+function containedImageRect(
+  boxW: number,
+  boxH: number,
+  natW: number,
+  natH: number,
+): { left: number; top: number; width: number; height: number } {
+  if (natW <= 0 || natH <= 0) return { left: 0, top: 0, width: boxW, height: boxH };
+  const boxRatio = boxW / boxH;
+  const imgRatio = natW / natH;
+  if (imgRatio > boxRatio) {
+    const height = boxW / imgRatio;
+    return { left: 0, top: (boxH - height) / 2, width: boxW, height };
+  }
+  const width = boxH * imgRatio;
+  return { left: (boxW - width) / 2, top: 0, width, height: boxH };
 }
 
 function ElementView({
@@ -259,6 +310,16 @@ function ElementView({
   const hasHeight = element.kind === "image" || element.kind === "shape" || (element.kind === "stack" && element.height != null);
   const isStack = element.kind === "stack";
 
+  const imageSrc =
+    element.kind === "image" ? design.images[element.imageId]?.dataUrl : undefined;
+  const naturalSize = useImageNaturalSize(imageSrc);
+  const containRect =
+    element.kind === "image" && element.fit === "contain" && naturalSize
+      ? containedImageRect(element.width, element.height, naturalSize.w, naturalSize.h)
+      : null;
+  // For letterboxed (contain) images, hug the painted photo instead of the box.
+  const useImageOverlaySelection = selected && !stackEditing && containRect != null;
+
   const markEditBegin = () => {
     if (editBeginCalled.current) return;
     editBeginCalled.current = true;
@@ -278,6 +339,31 @@ function ElementView({
       oy: element.y,
       ow: element.width,
       oh: bounds.height,
+      aspectRatio:
+        element.kind === "image" && naturalSize
+          ? naturalSize.w / naturalSize.h
+          : undefined,
+    };
+  };
+
+  const startContainImageResize = (e: React.PointerEvent) => {
+    if (!editable || stackEditing || !containRect || !naturalSize) return;
+    e.stopPropagation();
+    e.preventDefault();
+    markEditBegin();
+    setDragging(true);
+    onSelect?.({ elementIndex: index });
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    drag.current = {
+      mode: "resize",
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: element.x + containRect.left,
+      oy: element.y + containRect.top,
+      ow: containRect.width,
+      oh: containRect.height,
+      containResize: true,
+      aspectRatio: naturalSize.w / naturalSize.h,
     };
   };
 
@@ -328,9 +414,24 @@ function ElementView({
       } as Partial<SlideElement>);
     } else {
       onSnapGuidesChange?.(null);
-      const patch: Record<string, number> = { width: Math.max(60, Math.round(d.ow + dx)) };
-      if (hasHeight) patch.height = Math.max(40, Math.round(d.oh + dy));
-      onChange?.(index, patch as Partial<SlideElement>);
+      if (d.containResize) {
+        const newW = Math.max(60, Math.round(d.ow + dx));
+        const newH = Math.max(40, Math.round(newW / (d.aspectRatio ?? 1)));
+        onChange?.(index, {
+          x: Math.round(d.ox),
+          y: Math.round(d.oy),
+          width: newW,
+          height: newH,
+        } as Partial<SlideElement>);
+      } else if (element.kind === "image" && d.aspectRatio) {
+        const newW = Math.max(60, Math.round(d.ow + dx));
+        const newH = Math.max(40, Math.round(newW / d.aspectRatio));
+        onChange?.(index, { width: newW, height: newH } as Partial<SlideElement>);
+      } else {
+        const patch: Record<string, number> = { width: Math.max(60, Math.round(d.ow + dx)) };
+        if (hasHeight) patch.height = Math.max(40, Math.round(d.oh + dy));
+        onChange?.(index, patch as Partial<SlideElement>);
+      }
     }
   };
 
@@ -358,7 +459,7 @@ function ElementView({
     transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
     transformOrigin: "top left",
     cursor: selectableCursor(editable && !stackEditing, hovered, dragging),
-    outline: selected
+    outline: selected && !useImageOverlaySelection
       ? stackEditing
         ? "3px dashed rgba(80,150,250,0.7)"
         : "5px solid rgba(80,150,250,0.95)"
@@ -387,26 +488,34 @@ function ElementView({
           }
         : {};
 
-  const resizeHandle =
+  const makeResizeHandle = (
+    posStyle: React.CSSProperties,
+    onResizeDown?: (e: React.PointerEvent) => void,
+  ) =>
     editable && selected && !stackEditing ? (
       <div
-        onPointerDown={(e) => beginDrag("resize", e)}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          if (onResizeDown) onResizeDown(e);
+          else beginDrag("resize", e);
+        }}
         onPointerMove={onMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         style={{
           position: "absolute",
-          right: -16,
-          bottom: -16,
           width: 32,
           height: 32,
           borderRadius: "50%",
           background: "rgba(80,150,250,0.95)",
           border: "4px solid white",
           cursor: "nwse-resize",
+          ...posStyle,
         }}
       />
     ) : null;
+
+  const resizeHandle = makeResizeHandle({ right: -16, bottom: -16 });
 
   if (element.kind === "stack") {
     return (
@@ -465,7 +574,15 @@ function ElementView({
         {...interaction}
         style={pill ? { ...base, ...textPillWrapperStyle() } : base}
       >
-        <TextContent element={element} theme={theme} />
+        <EditableTextContent
+          element={element}
+          theme={theme}
+          editable={editable && !stackEditing}
+          onContentChange={(content) =>
+            onChange?.(index, { content, segments: undefined } as Partial<SlideElement>)
+          }
+          onEditBegin={markEditBegin}
+        />
         {!pill && resizeHandle}
       </div>
     );
@@ -473,12 +590,41 @@ function ElementView({
 
   if (element.kind === "image") {
     return (
-      <div
-        {...interaction}
-        style={{ ...base, height: element.height, borderRadius: element.borderRadius, overflow: "hidden" }}
-      >
-        <ImageContent element={element} design={design} />
-        {resizeHandle}
+      <div {...interaction} style={{ ...base, height: element.height }}>
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            borderRadius: element.borderRadius,
+            overflow: "hidden",
+          }}
+        >
+          <ImageContent element={element} design={design} />
+        </div>
+        {useImageOverlaySelection && containRect ? (
+          <div
+            style={{
+              position: "absolute",
+              left: containRect.left,
+              top: containRect.top,
+              width: containRect.width,
+              height: containRect.height,
+              outline: "5px solid rgba(80,150,250,0.95)",
+              outlineOffset: "3px",
+              borderRadius: element.borderRadius,
+              pointerEvents: "none",
+            }}
+          />
+        ) : null}
+        {useImageOverlaySelection && containRect
+          ? makeResizeHandle(
+              {
+                left: containRect.left + containRect.width - 16,
+                top: containRect.top + containRect.height - 16,
+              },
+              startContainImageResize,
+            )
+          : resizeHandle}
       </div>
     );
   }
@@ -515,17 +661,25 @@ function StackChildView({
 }) {
   const stretch = stack.alignItems === "stretch";
   const pill = child.kind === "text" && isTextPill(child);
-  const drag = useRef<{ sx: number; sy: number; ow: number; oh: number } | null>(null);
+  const drag = useRef<StackChildDragState | null>(null);
   const editBeginCalled = useRef(false);
   const [hovered, setHovered] = useState(false);
   const hasHeight = child.kind !== "text";
+
+  const imageSrc = child.kind === "image" ? design.images[child.imageId]?.dataUrl : undefined;
+  const naturalSize = useImageNaturalSize(imageSrc);
+  const containRect =
+    child.kind === "image" && child.fit === "contain" && naturalSize
+      ? containedImageRect(child.width, child.height, naturalSize.w, naturalSize.h)
+      : null;
+  const useImageOverlaySelection = selected && child.kind === "image" && containRect != null;
 
   const wrapperStyle: React.CSSProperties = {
     width: pill ? "fit-content" : stretch ? "100%" : child.width,
     maxWidth: "100%",
     flexShrink: 0,
     position: "relative",
-    outline: selected ? "4px solid rgba(80,150,250,0.95)" : undefined,
+    outline: selected && !useImageOverlaySelection ? "4px solid rgba(80,150,250,0.95)" : undefined,
     outlineOffset: "2px",
     cursor: editable ? (hovered ? "pointer" : "default") : "default",
     touchAction: editable ? "none" : undefined,
@@ -560,11 +714,14 @@ function StackChildView({
             onEditBegin?.();
           }
           (e.currentTarget as Element).setPointerCapture(e.pointerId);
+          const useContainResize = useImageOverlaySelection && containRect && naturalSize;
           drag.current = {
             sx: e.clientX,
             sy: e.clientY,
-            ow: child.width,
-            oh: hasHeight ? (child as { height: number }).height : 0,
+            ow: useContainResize ? containRect.width : child.width,
+            oh: useContainResize ? containRect.height : hasHeight ? (child as { height: number }).height : 0,
+            containResize: useContainResize,
+            aspectRatio: naturalSize ? naturalSize.w / naturalSize.h : undefined,
           };
         }}
         onPointerMove={(e) => {
@@ -572,9 +729,19 @@ function StackChildView({
           if (!d || !onChange) return;
           const dx = (e.clientX - d.sx) / scale;
           const dy = (e.clientY - d.sy) / scale;
-          const patch: Partial<StackChild> = { width: Math.max(60, Math.round(d.ow + dx)) };
-          if (hasHeight) (patch as { height: number }).height = Math.max(40, Math.round(d.oh + dy));
-          onChange(patch);
+          if (d.containResize && d.aspectRatio) {
+            const newW = Math.max(60, Math.round(d.ow + dx));
+            const newH = Math.max(40, Math.round(newW / d.aspectRatio));
+            onChange({ width: newW, height: newH } as Partial<StackChild>);
+          } else if (child.kind === "image" && d.aspectRatio) {
+            const newW = Math.max(60, Math.round(d.ow + dx));
+            const newH = Math.max(40, Math.round(newW / d.aspectRatio));
+            onChange({ width: newW, height: newH } as Partial<StackChild>);
+          } else {
+            const patch: Partial<StackChild> = { width: Math.max(60, Math.round(d.ow + dx)) };
+            if (hasHeight) (patch as { height: number }).height = Math.max(40, Math.round(d.oh + dy));
+            onChange(patch);
+          }
         }}
         onPointerUp={(e) => {
           (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
@@ -588,8 +755,12 @@ function StackChildView({
         }}
         style={{
           position: "absolute",
-          right: -12,
-          bottom: -12,
+          ...(useImageOverlaySelection && containRect
+            ? {
+                left: containRect.left + containRect.width - 12,
+                top: containRect.top + containRect.height - 12,
+              }
+            : { right: -12, bottom: -12 }),
           width: 24,
           height: 24,
           borderRadius: "50%",
@@ -604,7 +775,20 @@ function StackChildView({
   if (child.kind === "text") {
     return (
       <div {...interaction} style={wrapperStyle}>
-        <TextContent element={child} theme={theme} />
+        <EditableTextContent
+          element={child}
+          theme={theme}
+          editable={editable}
+          onContentChange={(content) =>
+            onChange?.({ content, segments: undefined } as Partial<StackChild>)
+          }
+          onEditBegin={() => {
+            if (!editBeginCalled.current) {
+              editBeginCalled.current = true;
+              onEditBegin?.();
+            }
+          }}
+        />
         {resizeHandle}
       </div>
     );
@@ -612,11 +796,32 @@ function StackChildView({
 
   if (child.kind === "image") {
     return (
-      <div
-        {...interaction}
-        style={{ ...wrapperStyle, height: child.height, borderRadius: child.borderRadius, overflow: "hidden" }}
-      >
-        <ImageContent element={child} design={design} />
+      <div {...interaction} style={{ ...wrapperStyle, height: child.height }}>
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            borderRadius: child.borderRadius,
+            overflow: "hidden",
+          }}
+        >
+          <ImageContent element={child} design={design} />
+        </div>
+        {useImageOverlaySelection && containRect ? (
+          <div
+            style={{
+              position: "absolute",
+              left: containRect.left,
+              top: containRect.top,
+              width: containRect.width,
+              height: containRect.height,
+              outline: "4px solid rgba(80,150,250,0.95)",
+              outlineOffset: "2px",
+              borderRadius: child.borderRadius,
+              pointerEvents: "none",
+            }}
+          />
+        ) : null}
         {resizeHandle}
       </div>
     );
@@ -639,31 +844,136 @@ function textPillWrapperStyle(): React.CSSProperties {
   return { width: "fit-content", maxWidth: "100%" };
 }
 
-function TextContent({ element, theme }: { element: TextElementLike; theme: Theme }) {
+function textContentStyle(element: TextElementLike, theme: Theme): React.CSSProperties {
   const pill = isTextPill(element);
+  return {
+    fontFamily: `'${resolveFont(element.font, theme.fonts)}', sans-serif`,
+    fontSize: element.fontSize,
+    fontWeight: element.fontWeight,
+    color: resolveColor(element.color, theme.palette),
+    textAlign: element.align,
+    fontStyle: element.italic ? "italic" : "normal",
+    textTransform: element.uppercase ? "uppercase" : "none",
+    lineHeight: element.lineHeight,
+    letterSpacing: element.letterSpacing,
+    background: resolveColor(element.background, theme.palette),
+    paddingLeft: element.paddingX,
+    paddingRight: element.paddingX,
+    paddingTop: element.paddingY,
+    paddingBottom: element.paddingY,
+    borderRadius: element.borderRadius,
+    boxSizing: "border-box",
+    display: pill ? "inline-block" : "block",
+    whiteSpace: pill ? "nowrap" : "pre-wrap",
+    width: pill ? "max-content" : "100%",
+  };
+}
+
+function TextContent({ element, theme }: { element: TextElementLike; theme: Theme }) {
+  return (
+    <div style={textContentStyle(element, theme)}>
+      {element.segments && element.segments.length > 0
+        ? element.segments.map((seg, i) => (
+            <span key={i} style={{ color: resolveColor(seg.color, theme.palette) }}>
+              {seg.text}
+            </span>
+          ))
+        : element.content}
+    </div>
+  );
+}
+
+function EditableTextContent({
+  element,
+  theme,
+  editable,
+  onContentChange,
+  onEditBegin,
+}: {
+  element: TextElementLike;
+  theme: Theme;
+  editable: boolean;
+  onContentChange: (content: string) => void;
+  onEditBegin?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const editRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef(element.content);
+
+  useEffect(() => {
+    if (!editing) draftRef.current = element.content;
+  }, [element.content, editing]);
+
+  useEffect(() => {
+    if (!editing || !editRef.current) return;
+    editRef.current.focus();
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editRef.current);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, [editing]);
+
+  const commit = () => {
+    const next = editRef.current?.innerText ?? draftRef.current;
+    setEditing(false);
+    if (next !== element.content) {
+      onEditBegin?.();
+      onContentChange(next);
+    }
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    if (editRef.current) editRef.current.innerText = element.content;
+  };
+
+  if (!editable) {
+    return <TextContent element={element} theme={theme} />;
+  }
+
+  if (editing) {
+    return (
+      <div
+        ref={editRef}
+        contentEditable
+        suppressContentEditableWarning
+        onPointerDown={(e) => e.stopPropagation()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+            return;
+          }
+          if (e.key === "Enter" && !e.shiftKey && isTextPill(element)) {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        style={{
+          ...textContentStyle(element, theme),
+          outline: "2px solid rgba(80,150,250,0.95)",
+          outlineOffset: 2,
+          cursor: "text",
+          userSelect: "text",
+        }}
+      >
+        {element.content}
+      </div>
+    );
+  }
+
   return (
     <div
-      style={{
-        fontFamily: `'${resolveFont(element.font, theme.fonts)}', sans-serif`,
-        fontSize: element.fontSize,
-        fontWeight: element.fontWeight,
-        color: resolveColor(element.color, theme.palette),
-        textAlign: element.align,
-        fontStyle: element.italic ? "italic" : "normal",
-        textTransform: element.uppercase ? "uppercase" : "none",
-        lineHeight: element.lineHeight,
-        letterSpacing: element.letterSpacing,
-        background: resolveColor(element.background, theme.palette),
-        paddingLeft: element.paddingX,
-        paddingRight: element.paddingX,
-        paddingTop: element.paddingY,
-        paddingBottom: element.paddingY,
-        borderRadius: element.borderRadius,
-        boxSizing: "border-box",
-        display: pill ? "inline-block" : "block",
-        whiteSpace: pill ? "nowrap" : "pre-wrap",
-        width: pill ? "max-content" : "100%",
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        draftRef.current = element.content;
+        setEditing(true);
       }}
+      title="Double-click to edit"
+      style={{ ...textContentStyle(element, theme), cursor: "text" }}
     >
       {element.segments && element.segments.length > 0
         ? element.segments.map((seg, i) => (

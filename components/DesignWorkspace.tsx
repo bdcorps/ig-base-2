@@ -151,8 +151,8 @@ export default function DesignWorkspace({ id }: Props) {
   if (!generation) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-        <p className="text-[14px] text-text-secondary">Design not found</p>
-        <Link href="/" className="mt-2 text-[13px] text-text-tertiary underline hover:text-text-secondary">
+        <p className="text-[14px] text-secondary">Design not found</p>
+        <Link href="/" className="mt-2 text-[13px] text-text-tertiary underline hover:text-secondary">
           Start a new design
         </Link>
       </div>
@@ -242,6 +242,34 @@ export default function DesignWorkspace({ id }: Props) {
     });
   }
 
+  function updateSlideImage(
+    imageId: string,
+    patch: { dataUrl: string; prompt?: string },
+    recordHistory = false,
+  ) {
+    if (recordHistory) pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx
+          ? s
+          : {
+            ...s,
+            design: {
+              ...s.design,
+              images: {
+                ...s.design.images,
+                [imageId]: {
+                  dataUrl: patch.dataUrl,
+                  prompt: patch.prompt ?? s.design.images[imageId]?.prompt ?? "User upload",
+                },
+              },
+            },
+          },
+      ),
+    });
+  }
+
   async function copyJson() {
     if (!activeSlide) return;
     const json = JSON.stringify(redactImages(activeSlide.design), null, 2);
@@ -271,7 +299,7 @@ export default function DesignWorkspace({ id }: Props) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
         <span className="mb-3 h-2.5 w-2.5 rounded-full bg-red-500" />
-        <p className="text-[14px] font-medium text-text-primary">Generation failed</p>
+        <p className="text-[14px] font-medium text-primary">Generation failed</p>
         <p className="mt-1 max-w-md text-[13px] text-red-600">
           {gen.error ?? "Something went wrong"}
         </p>
@@ -294,36 +322,11 @@ export default function DesignWorkspace({ id }: Props) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {gen.slides.length > 0 && gen.status === "complete" && (
-              <>
-                <button
-                  type="button"
-                  onClick={undo}
-                  disabled={!canUndo}
-                  aria-label="Undo"
-                  title="Undo (⌘Z)"
-                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-neutral-50 disabled:opacity-40"
-                >
-                  Undo
-                </button>
-                <button
-                  type="button"
-                  onClick={redo}
-                  disabled={!canRedo}
-                  aria-label="Redo"
-                  title="Redo (⌘⇧Z)"
-                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-neutral-50 disabled:opacity-40"
-                >
-                  Redo
-                </button>
-              </>
-            )}
-
-            {gen.slides.length > 0 && gen.status === "complete" && (
               <button
                 type="button"
                 onClick={downloadZip}
                 disabled={exporting}
-                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
               >
                 {exporting ? "Exporting…" : "Export"}
               </button>
@@ -332,7 +335,7 @@ export default function DesignWorkspace({ id }: Props) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-text-secondary"
+                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
                 aria-label="More actions"
                 aria-expanded={menuOpen}
               >
@@ -351,7 +354,7 @@ export default function DesignWorkspace({ id }: Props) {
                       type="button"
                       onClick={copyJson}
                       disabled={!activeSlide}
-                      className="block w-full px-3 py-1.5 text-left text-[13px] text-text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="block w-full px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Copy JSON
                     </button>
@@ -415,9 +418,11 @@ export default function DesignWorkspace({ id }: Props) {
                   return (
                     <StackChildInspector
                       child={child}
+                      images={activeSlide.design.images}
                       onChange={(patch) =>
                         updateStackChild(selection.elementIndex, selection.childIndex!, patch, true)
                       }
+                      onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
                     />
                   );
                 }
@@ -425,7 +430,9 @@ export default function DesignWorkspace({ id }: Props) {
                 return (
                   <ElementInspector
                     element={el}
+                    images={activeSlide.design.images}
                     onChange={(patch) => updateElement(selection.elementIndex, patch, true)}
+                    onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
                   />
                 );
               })()}
@@ -473,16 +480,29 @@ export default function DesignWorkspace({ id }: Props) {
   );
 }
 
+function readImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function ElementInspector({
   element,
+  images,
   onChange,
+  onImageChange,
 }: {
   element: SlideElement;
+  images: SlideDesign["images"];
   onChange: (patch: Partial<SlideElement>) => void;
+  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
-      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-secondary">{label}</p>
       <input
         type="number"
         value={Math.round(value)}
@@ -504,25 +524,31 @@ function ElementInspector({
       title="Element"
       description={elementDescriptions[element.kind]}
     >
-      <div className="mb-4 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-neutral-100">
-          <ElementKindIcon kind={element.kind} className="h-5 w-5 text-text-secondary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium capitalize text-text-base">
-            {element.kind}
-          </p>
-          <p className="truncate text-[12px] text-text-secondary">
-            {element.kind === "text"
-              ? element.content.slice(0, 40)
-              : element.kind === "stack"
-                ? `${element.children.length} children · ${element.direction}`
-                : `${element.width}×${"height" in element ? element.height : "—"}px`}
-          </p>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-3">
+        {element.kind === "text" && (
+          <div>
+            <p className="mb-2 text-[12px] text-secondary">Content</p>
+            <textarea
+              value={element.content}
+              onChange={(e) =>
+                onChange({ content: e.target.value, segments: undefined } as Partial<SlideElement>)
+              }
+              rows={4}
+              className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+            />
+          </div>
+        )}
+        {element.kind === "image" && (
+          <ImageInspectorFields
+            imageId={element.imageId}
+            images={images}
+            fit={element.fit}
+            borderRadius={element.borderRadius}
+            onFitChange={(fit) => onChange({ fit } as Partial<SlideElement>)}
+            onBorderRadiusChange={(borderRadius) => onChange({ borderRadius } as Partial<SlideElement>)}
+            onImageChange={onImageChange}
+          />
+        )}
         {num("Width", element.width, "width")}
         {element.kind === "stack" && (
           <>
@@ -575,7 +601,7 @@ function ElementInspector({
             {num("Font size", element.fontSize, "fontSize")}
             {num("Weight", element.fontWeight, "fontWeight")}
             <div>
-              <p className="mb-2 text-[12px] text-text-secondary">Align</p>
+              <p className="mb-2 text-[12px] text-secondary">Align</p>
               <div className="relative">
                 <select
                   value={element.align}
@@ -596,16 +622,78 @@ function ElementInspector({
   );
 }
 
+function ImageInspectorFields({
+  imageId,
+  images,
+  fit,
+  borderRadius,
+  onFitChange,
+  onBorderRadiusChange,
+  onImageChange,
+}: {
+  imageId: string;
+  images: SlideDesign["images"];
+  fit: "cover" | "contain";
+  borderRadius: number;
+  onFitChange: (fit: "cover" | "contain") => void;
+  onBorderRadiusChange: (borderRadius: number) => void;
+  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
+}) {
+  const image = images[imageId];
+
+  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await readImageFile(file);
+    onImageChange(imageId, { dataUrl, prompt: file.name });
+    e.target.value = "";
+  }
+
+  return (
+    <>
+      <div>
+        <p className="mb-2 text-[12px] text-secondary">Replace image</p>
+        <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50">
+          Choose file…
+          <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+        </label>
+      </div>
+      <SelectField
+        label="Fit"
+        value={fit}
+        options={[
+          { value: "cover", label: "Cover" },
+          { value: "contain", label: "Contain" },
+        ]}
+        onChange={(value) => onFitChange(value as "cover" | "contain")}
+      />
+      <div>
+        <p className="mb-2 text-[12px] text-secondary">Border radius</p>
+        <input
+          type="number"
+          value={Math.round(borderRadius)}
+          onChange={(e) => onBorderRadiusChange(Number(e.target.value))}
+          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+        />
+      </div>
+    </>
+  );
+}
+
 function StackChildInspector({
   child,
+  images,
   onChange,
+  onImageChange,
 }: {
   child: StackChild;
+  images: SlideDesign["images"];
   onChange: (patch: Partial<StackChild>) => void;
+  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
-      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-secondary">{label}</p>
       <input
         type="number"
         value={Math.round(value)}
@@ -625,11 +713,11 @@ function StackChildInspector({
     <SidebarSection title="Stack item" description={descriptions[child.kind]}>
       <div className="mb-4 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-neutral-100">
-          <ElementKindIcon kind={child.kind} className="h-5 w-5 text-text-secondary" />
+          <ElementKindIcon kind={child.kind} className="h-5 w-5 text-secondary" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium capitalize text-text-base">{child.kind}</p>
-          <p className="truncate text-[12px] text-text-secondary">
+          <p className="truncate text-[12px] text-secondary">
             {child.kind === "text"
               ? child.content.slice(0, 40)
               : `${child.width}×${"height" in child ? child.height : "—"}px`}
@@ -638,6 +726,30 @@ function StackChildInspector({
       </div>
 
       <div className="flex flex-col gap-3">
+        {child.kind === "text" && (
+          <div>
+            <p className="mb-2 text-[12px] text-secondary">Content</p>
+            <textarea
+              value={child.content}
+              onChange={(e) =>
+                onChange({ content: e.target.value, segments: undefined } as Partial<StackChild>)
+              }
+              rows={4}
+              className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+            />
+          </div>
+        )}
+        {child.kind === "image" && (
+          <ImageInspectorFields
+            imageId={child.imageId}
+            images={images}
+            fit={child.fit}
+            borderRadius={child.borderRadius}
+            onFitChange={(fit) => onChange({ fit } as Partial<StackChild>)}
+            onBorderRadiusChange={(borderRadius) => onChange({ borderRadius } as Partial<StackChild>)}
+            onImageChange={onImageChange}
+          />
+        )}
         {num("Width", child.width, "width")}
         {child.kind !== "text" && num("Height", child.height, "height")}
         {child.kind === "text" && (
@@ -674,7 +786,7 @@ function SelectField({
 }) {
   return (
     <div>
-      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-secondary">{label}</p>
       <div className="relative">
         <select
           value={value}
