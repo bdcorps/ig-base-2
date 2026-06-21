@@ -7,6 +7,7 @@ import {
 import { assembleDesignFromEvents } from "@/lib/designAssembly";
 import type { DesignEvent, UserImageInput } from "@/lib/designEvents";
 import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
+import { prisma } from "@/lib/prisma";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -17,7 +18,6 @@ import {
   TextElementSchema,
   type PaletteOption,
 } from "@/lib/schema";
-import { prisma } from "@/lib/prisma";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
@@ -269,24 +269,24 @@ export async function runDesignGeneration(
       system: SYSTEM_PROMPT,
       messages: [
         ...FEW_SHOT_MESSAGES,
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              image: new URL(STYLE_REFERENCE_IMAGE_URL),
-            },
-            {
-              type: "text",
-              text:
-                "Make the carousel like this — copy the style, colors, and fonts from this reference.\n\n" +
-                prompt +
-                slideCountNote +
-                userImageNote +
-                paletteBrief,
-            },
-          ],
-        },
+        // {
+        //   role: "user",
+        //   content: [
+        //     {
+        //       type: "image",
+        //       image: new URL(STYLE_REFERENCE_IMAGE_URL),
+        //     },
+        //     {
+        //       type: "text",
+        //       text:
+        //         "Make the carousel like this — copy the style, colors, and fonts from this reference.\n\n" +
+        //         prompt +
+        //         slideCountNote +
+        //         userImageNote +
+        //         paletteBrief,
+        //     },
+        //   ],
+        // },
       ],
       tools: {
         startSlide: tool({
