@@ -269,24 +269,7 @@ export async function runDesignGeneration(
       system: SYSTEM_PROMPT,
       messages: [
         ...FEW_SHOT_MESSAGES,
-        // {
-        //   role: "user",
-        //   content: [
-        //     {
-        //       type: "image",
-        //       image: new URL(STYLE_REFERENCE_IMAGE_URL),
-        //     },
-        //     {
-        //       type: "text",
-        //       text:
-        //         "Make the carousel like this — copy the style, colors, and fonts from this reference.\n\n" +
-        //         prompt +
-        //         slideCountNote +
-        //         userImageNote +
-        //         paletteBrief,
-        //     },
-        //   ],
-        // },
+        { role: "user", content: prompt + slideCountNote + userImageNote + paletteBrief },
       ],
       tools: {
         startSlide: tool({

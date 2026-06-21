@@ -1,7 +1,7 @@
 "use client";
 
-import type { TemplateCategory } from "@/lib/templates";
-import type { CarouselTemplate } from "@/lib/templates";
+import type { CarouselTemplate, TemplateCategory } from "@/lib/templates";
+import { useRef } from "react";
 import TemplateCard from "./TemplateCard";
 
 interface TemplateSectionProps {
@@ -10,28 +10,52 @@ interface TemplateSectionProps {
 }
 
 export default function TemplateSection({ category, onSelect }: TemplateSectionProps) {
-  return (
-    <section className="mb-12">
-      <div className="mb-5 flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            {category.title}
-          </h2>
-          <p className="mt-1 text-sm text-[#8E8E93]">{category.subtitle}</p>
-        </div>
-        <button
-          type="button"
-          className="shrink-0 text-sm font-medium text-[#8E8E93] hover:text-neutral-700"
-        >
-          See all
-        </button>
-      </div>
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const countLabel = category.displayCount ?? String(category.templates.length);
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {category.templates.map((template) => (
-          <TemplateCard key={template.id} template={template} onSelect={onSelect} />
-        ))}
+  const scrollNext = () => {
+    scrollRef.current?.scrollBy({ left: 560, behavior: "smooth" });
+  };
+
+  return (
+    <section className="mb-10">
+      <button
+        type="button"
+        className="mb-4 flex items-center gap-2 text-left transition-opacity hover:opacity-70"
+      >
+        <h2 className="text-lg font-semibold tracking-tight text-neutral-800">{category.title}</h2>
+        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">
+          {countLabel}
+        </span>
+        <ChevronRight className="text-neutral-400" />
+      </button>
+
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {category.templates.map((template) => (
+            <TemplateCard key={template.id} template={template} onSelect={onSelect} />
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+function ChevronRight({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={`text-neutral-700 ${className}`}
+    >
+      <path d="M9 18l6-6-6-6" />
+    </svg>
   );
 }
