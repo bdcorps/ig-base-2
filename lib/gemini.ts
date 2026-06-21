@@ -1,5 +1,4 @@
 import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
-import { removeChromakey } from "@/lib/chromakey";
 
 /**
  * Generate images with Gemini 3.1 Flash Image and return base64 data URLs.
@@ -87,6 +86,7 @@ export async function generateSticker(
   aspect: ImageAspect = "square",
 ): Promise<{ dataUrl: string }> {
   const { dataUrl } = await generateImage(STICKER_CHROMAKEY_PROMPT + prompt, aspect);
+  const { removeChromakey } = await import("@/lib/chromakey");
   const transparent = await removeChromakey(dataUrl);
   return { dataUrl: transparent };
 }

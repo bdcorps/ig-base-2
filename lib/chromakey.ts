@@ -1,4 +1,5 @@
-import sharp from "sharp";
+import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
 
 /** Convert RGB (0-255) to HSV (h: 0-360, s/v: 0-100). */
 function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
@@ -29,30 +30,46 @@ function isChromakeyGreen(r: number, g: number, b: number): boolean {
   return h >= 75 && h <= 165 && s >= 25 && v >= 20;
 }
 
+function decodeImage(input: Buffer): { pixels: Uint8Array; width: number; height: number } {
+  try {
+    const png = PNG.sync.read(input);
+    return { pixels: png.data, width: png.width, height: png.height };
+  } catch {
+    const decoded = jpeg.decode(input, { useTArray: true });
+    return {
+      pixels: decoded.data,
+      width: decoded.width,
+      height: decoded.height,
+    };
+  }
+}
+
+function encodePng(
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+): Buffer {
+  const png = new PNG({ width, height });
+  png.data = Buffer.from(pixels);
+  return PNG.sync.write(png);
+}
+
 /**
  * Strip a chromakey-green background and return a transparent PNG data URL.
  */
 export async function removeChromakey(dataUrl: string): Promise<string> {
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
   const input = Buffer.from(base64, "base64");
+  const { pixels, width, height } = decodeImage(input);
 
-  const { data, info } = await sharp(input)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const { width, height, channels } = info;
-  const pixels = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-
-  for (let i = 0; i < pixels.length; i += channels) {
+  for (let i = 0; i < pixels.length; i += 4) {
     const r = pixels[i]!;
     const g = pixels[i + 1]!;
     const b = pixels[i + 2]!;
 
     if (isChromakeyGreen(r, g, b)) {
       pixels[i + 3] = 0;
-    } else if (channels === 4) {
-      // Feather edges: partially green pixels get reduced alpha.
+    } else {
       const greenness = g / Math.max(r, b, 1);
       if (greenness > 1.15 && g > 120) {
         pixels[i + 3] = Math.round(pixels[i + 3]! * Math.max(0, 1.6 - greenness));
@@ -60,11 +77,6 @@ export async function removeChromakey(dataUrl: string): Promise<string> {
     }
   }
 
-  const output = await sharp(Buffer.from(pixels), {
-    raw: { width, height, channels: 4 },
-  })
-    .png()
-    .toBuffer();
-
+  const output = encodePng(pixels, width, height);
   return `data:image/png;base64,${output.toString("base64")}`;
 }
