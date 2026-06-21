@@ -170,7 +170,7 @@ function backgroundStyle(design: SlideDesign, theme: Theme): React.CSSProperties
 function renderBackgroundImage(design: SlideDesign, theme: Theme) {
   const bg = design.background;
   if (bg.type !== "image") return null;
-  const src = design.images[bg.imageId]?.dataUrl;
+  const src = design.images[bg.imageId]?.url;
   if (!src) return null;
   const overlay = resolveColor(bg.overlay, theme.palette);
   return (
@@ -345,7 +345,7 @@ function ElementView({
   const isStack = element.kind === "stack";
 
   const imageSrc =
-    element.kind === "image" ? design.images[element.imageId]?.dataUrl : undefined;
+    element.kind === "image" ? design.images[element.imageId]?.url : undefined;
   const naturalSize = useImageNaturalSize(imageSrc);
   const containRect =
     element.kind === "image" && element.fit === "contain" && naturalSize
@@ -709,7 +709,7 @@ function StackChildView({
   const [hovered, setHovered] = useState(false);
   const hasHeight = child.kind !== "text";
 
-  const imageSrc = child.kind === "image" ? design.images[child.imageId]?.dataUrl : undefined;
+  const imageSrc = child.kind === "image" ? design.images[child.imageId]?.url : undefined;
   const naturalSize = useImageNaturalSize(imageSrc);
   const containRect =
     child.kind === "image" && child.fit === "contain" && naturalSize
@@ -1049,7 +1049,7 @@ function ImageContent({
   element: Extract<SlideElement | StackChild, { kind: "image" }>;
   design: SlideDesign;
 }) {
-  const src = design.images[element.imageId]?.dataUrl;
+  const src = design.images[element.imageId]?.url;
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element

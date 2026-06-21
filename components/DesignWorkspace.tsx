@@ -1,6 +1,7 @@
 "use client";
 
 import Controls from "@/components/Controls";
+import FeedbackModal from "@/components/FeedbackModal";
 import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
 import { useGeneration } from "@/context/GenerationsContext";
@@ -24,6 +25,8 @@ export default function DesignWorkspace({ id }: Props) {
   const [stackEditIndex, setStackEditIndex] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const feedbackShownRef = useRef(false);
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const restoreSlides = useCallback(
@@ -149,6 +152,43 @@ export default function DesignWorkspace({ id }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selection, stackEditIndex, deleteSelection, undo, redo]);
 
+  useEffect(() => {
+    if (
+      generation?.status === "complete" &&
+      generation.promptId &&
+      generation.slides.length > 0 &&
+      !feedbackShownRef.current
+    ) {
+      feedbackShownRef.current = true;
+      setFeedbackOpen(true);
+    }
+  }, [generation?.status, generation?.promptId, generation?.slides.length]);
+
+  const submitFeedback = useCallback(
+    async (rating: number, comment: string) => {
+      if (!generation?.promptId) return;
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptId: generation.promptId,
+          rating,
+          comment: comment.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to save feedback");
+      }
+      trackEvent("submit_feedback", {
+        generation_id: id,
+        prompt_id: generation.promptId,
+        rating,
+        has_comment: comment.trim().length > 0,
+      });
+    },
+    [generation?.promptId, id],
+  );
+
   if (!generation) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
@@ -245,7 +285,7 @@ export default function DesignWorkspace({ id }: Props) {
 
   function updateSlideImage(
     imageId: string,
-    patch: { dataUrl: string; prompt?: string },
+    patch: { url: string; prompt?: string },
     recordHistory = false,
   ) {
     if (recordHistory) pushHistory();
@@ -261,7 +301,7 @@ export default function DesignWorkspace({ id }: Props) {
               images: {
                 ...s.design.images,
                 [imageId]: {
-                  dataUrl: patch.dataUrl,
+                  url: patch.url,
                   prompt: patch.prompt ?? s.design.images[imageId]?.prompt ?? "User upload",
                 },
               },
@@ -481,6 +521,12 @@ export default function DesignWorkspace({ id }: Props) {
           ))}
         </div>
       )}
+
+      <FeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmit={submitFeedback}
+      />
     </>
   );
 }
@@ -503,7 +549,7 @@ function ElementInspector({
   element: SlideElement;
   images: SlideDesign["images"];
   onChange: (patch: Partial<SlideElement>) => void;
-  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
+  onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
@@ -642,15 +688,15 @@ function ImageInspectorFields({
   borderRadius: number;
   onFitChange: (fit: "cover" | "contain") => void;
   onBorderRadiusChange: (borderRadius: number) => void;
-  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
+  onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
   const image = images[imageId];
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const dataUrl = await readImageFile(file);
-    onImageChange(imageId, { dataUrl, prompt: file.name });
+    const url = await readImageFile(file);
+    onImageChange(imageId, { url, prompt: file.name });
     e.target.value = "";
   }
 
@@ -694,7 +740,7 @@ function StackChildInspector({
   child: StackChild;
   images: SlideDesign["images"];
   onChange: (patch: Partial<StackChild>) => void;
-  onImageChange: (imageId: string, patch: { dataUrl: string; prompt?: string }) => void;
+  onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
@@ -886,7 +932,7 @@ function redactImages(design: SlideDesign) {
   const images = Object.fromEntries(
     Object.entries(design.images).map(([k, v]) => [
       k,
-      { prompt: v.prompt, dataUrl: `${v.dataUrl.slice(0, 32)}… (${v.dataUrl.length} chars)` },
+      { prompt: v.prompt, url: `${v.url.slice(0, 32)}… (${v.url.length} chars)` },
     ]),
   );
   return { ...design, images };

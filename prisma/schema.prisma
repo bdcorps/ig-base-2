@@ -101,6 +101,7 @@ model Prompt {
   id        String @id
   prompt    String
   output    Json?
+  feedback  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

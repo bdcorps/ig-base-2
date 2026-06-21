@@ -12,6 +12,7 @@ export interface Generation {
   activeSlideIndex: number;
   generatedPalettes: PaletteOption[];
   activePaletteId: string | null;
+  promptId: string | null;
   error: string | null;
   createdAt: number;
 }
@@ -26,6 +27,7 @@ export function createGeneration(prompt: string, slideCount: number): Generation
     activeSlideIndex: 0,
     generatedPalettes: [],
     activePaletteId: null,
+    promptId: null,
     error: null,
     createdAt: Date.now(),
   };

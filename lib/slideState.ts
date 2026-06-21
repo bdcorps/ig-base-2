@@ -76,9 +76,9 @@ export function applyDesignEvent(
       },
     };
   } else if (event.type === "image") {
-    const { imageId, dataUrl, prompt } = event.data as {
+    const { imageId, url, prompt } = event.data as {
       imageId: string;
-      dataUrl: string;
+      url: string;
       prompt: string;
     };
     next = next.map((s) => ({
@@ -87,7 +87,7 @@ export function applyDesignEvent(
         ...s.design,
         images: {
           ...s.design.images,
-          [imageId]: { dataUrl, prompt },
+          [imageId]: { url, prompt },
         },
       },
     }));

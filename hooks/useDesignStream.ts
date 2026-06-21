@@ -104,6 +104,8 @@ export async function streamDesign(
           generatedPalettes: event.data.palettes,
           activePaletteId: event.data.selectedPaletteId,
         });
+      } else if (event.type === "promptMeta") {
+        onUpdate({ promptId: event.data.promptId });
       } else if (event.type === "error") {
         throw new Error(event.message);
       } else if (event.type === "done") {

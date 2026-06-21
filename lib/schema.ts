@@ -177,7 +177,7 @@ export const SlideDesignSchema = AgentDesignSchema.extend({
   images: z
     .record(
       z.string(),
-      z.object({ dataUrl: z.string(), prompt: z.string() }),
+      z.object({ url: z.string(), prompt: z.string() }),
     )
     .default({}),
 });

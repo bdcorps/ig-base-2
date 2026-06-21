@@ -8,6 +8,7 @@ import { assembleDesignFromEvents } from "@/lib/designAssembly";
 import type { DesignEvent, UserImageInput } from "@/lib/designEvents";
 import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
+import { persistImageUrl } from "@/lib/r2";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -187,6 +188,7 @@ export async function runDesignGeneration(
       data: { id: promptId, prompt },
     });
     savedPromptId = promptId;
+    onEvent({ type: "promptMeta", data: { promptId } });
   } catch (err) {
     console.warn("failed to save prompt", err);
   }
@@ -236,7 +238,7 @@ export async function runDesignGeneration(
     onEvent(event);
   };
 
-  const images = new Map<string, { dataUrl: string; prompt: string }>();
+  const images = new Map<string, { url: string; prompt: string }>();
   let imageCounter = 0;
   let currentSlideIndex = 0;
   let slideCountEmitted = 0;
@@ -254,15 +256,16 @@ export async function runDesignGeneration(
     slideIndex: currentSlideIndex,
   });
 
-  userImages.forEach((img, i) => {
+  for (const [i, img] of userImages.entries()) {
     const id = `user_${i + 1}`;
     const label = img.name?.trim() || `User photo ${i + 1}`;
-    images.set(id, { dataUrl: img.dataUrl, prompt: label });
+    const url = await persistImageUrl(img.dataUrl, id);
+    images.set(id, { url, prompt: label });
     emit({
       type: "image",
-      data: { imageId: id, dataUrl: img.dataUrl, prompt: label },
+      data: { imageId: id, url, prompt: label },
     });
-  });
+  }
 
   if (paletteOptions.length > 0) {
     emit({
@@ -343,10 +346,11 @@ export async function runDesignGeneration(
                 imagePrompt,
                 aspect as ImageAspect,
               );
-              images.set(id, { dataUrl, prompt: imagePrompt });
+              const url = await persistImageUrl(dataUrl, id);
+              images.set(id, { url, prompt: imagePrompt });
               emit({
                 type: "image",
-                data: { imageId: id, dataUrl, prompt: imagePrompt },
+                data: { imageId: id, url, prompt: imagePrompt },
               });
               return { imageId: id };
             } catch (err) {
@@ -379,10 +383,11 @@ export async function runDesignGeneration(
                 stickerPrompt,
                 aspect as ImageAspect,
               );
-              images.set(id, { dataUrl, prompt: stickerPrompt });
+              const url = await persistImageUrl(dataUrl, id);
+              images.set(id, { url, prompt: stickerPrompt });
               emit({
                 type: "image",
-                data: { imageId: id, dataUrl, prompt: stickerPrompt },
+                data: { imageId: id, url, prompt: stickerPrompt },
               });
               return { imageId: id };
             } catch (err) {

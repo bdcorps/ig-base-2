@@ -37,7 +37,7 @@ export type DesignEvent =
     }
   | {
       type: "image";
-      data: { imageId: string; dataUrl: string; prompt: string };
+      data: { imageId: string; url: string; prompt: string };
     }
   | {
       type: "paletteOptions";
@@ -47,7 +47,8 @@ export type DesignEvent =
       };
     }
   | { type: "error"; message: string }
-  | { type: "done"; slideCount: number };
+  | { type: "done"; slideCount: number }
+  | { type: "promptMeta"; data: { promptId: string } };
 
 export interface UserImageInput {
   dataUrl: string;

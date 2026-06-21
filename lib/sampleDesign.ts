@@ -32,7 +32,7 @@ function slide1(): SlideState {
     palette: PRESET_PALETTES[0].palette,
     background: { type: "solid", color: "background" },
     images: {
-      hero: { dataUrl: PORTRAIT_DATA_URL, prompt: "Friendly entrepreneur portrait" },
+      hero: { url: PORTRAIT_DATA_URL, prompt: "Friendly entrepreneur portrait" },
     },
     elements: [
       {
@@ -395,6 +395,7 @@ export function createSampleGeneration(): Generation {
     activeSlideIndex: 0,
     generatedPalettes: SAMPLE_PALETTES,
     activePaletteId: SAMPLE_PALETTES[0].id,
+    promptId: null,
     error: null,
     createdAt: Date.now(),
   };
