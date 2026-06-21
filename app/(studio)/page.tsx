@@ -33,7 +33,7 @@ export default function Home() {
       <div className="flex flex-1 flex-col items-center justify-center px-8 py-12">
         <div className="mb-8 text-center">
           <h1 className="text-[22px] font-normal text-gray-700">
-            Make viral carousels for your IG feed withCarousel Studio (Beta)
+            Make viral carousels for your IG feed with Carousel Studio (Beta)
           </h1>
           <p className="text-[13px] text-gray-500">Go to ChatGPT, get a prompt for a carousel, paste it in and watch the magic happen.</p>
         </div>
