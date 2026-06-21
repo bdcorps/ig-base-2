@@ -231,23 +231,25 @@ function selectableCursor(editable: boolean, hovered: boolean, dragging: boolean
 
 /** Load an image (typically a data URL) and report its intrinsic dimensions. */
 function useImageNaturalSize(src: string | undefined): { w: number; h: number } | null {
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [loaded, setLoaded] = useState<{ src: string; size: { w: number; h: number } } | null>(
+    null,
+  );
   useEffect(() => {
-    if (!src) {
-      setSize(null);
-      return;
-    }
+    if (!src) return;
     let cancelled = false;
     const img = new window.Image();
     img.onload = () => {
-      if (!cancelled) setSize({ w: img.naturalWidth, h: img.naturalHeight });
+      if (!cancelled) {
+        setLoaded({ src, size: { w: img.naturalWidth, h: img.naturalHeight } });
+      }
     };
     img.src = src;
     return () => {
       cancelled = true;
     };
   }, [src]);
-  return size;
+  if (!src) return null;
+  return loaded?.src === src ? loaded.size : null;
 }
 
 /** The rect actually painted by `object-fit: contain` inside a box. */
@@ -266,6 +268,37 @@ function containedImageRect(
   }
   const width = boxH * imgRatio;
   return { left: (boxW - width) / 2, top: 0, width, height: boxH };
+}
+
+function ResizeHandleDot({
+  posStyle,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  posStyle: React.CSSProperties;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerUp: (e: React.PointerEvent) => void;
+}) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={{
+        position: "absolute",
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "rgba(80,150,250,0.95)",
+        border: "4px solid white",
+        cursor: "nwse-resize",
+        ...posStyle,
+      }}
+    />
+  );
 }
 
 function ElementView({
@@ -343,27 +376,6 @@ function ElementView({
         element.kind === "image" && naturalSize
           ? naturalSize.w / naturalSize.h
           : undefined,
-    };
-  };
-
-  const startContainImageResize = (e: React.PointerEvent) => {
-    if (!editable || stackEditing || !containRect || !naturalSize) return;
-    e.stopPropagation();
-    e.preventDefault();
-    markEditBegin();
-    setDragging(true);
-    onSelect?.({ elementIndex: index });
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    drag.current = {
-      mode: "resize",
-      sx: e.clientX,
-      sy: e.clientY,
-      ox: element.x + containRect.left,
-      oy: element.y + containRect.top,
-      ow: containRect.width,
-      oh: containRect.height,
-      containResize: true,
-      aspectRatio: naturalSize.w / naturalSize.h,
     };
   };
 
@@ -488,34 +500,60 @@ function ElementView({
           }
         : {};
 
-  const makeResizeHandle = (
-    posStyle: React.CSSProperties,
-    onResizeDown?: (e: React.PointerEvent) => void,
-  ) =>
-    editable && selected && !stackEditing ? (
-      <div
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          if (onResizeDown) onResizeDown(e);
-          else beginDrag("resize", e);
-        }}
-        onPointerMove={onMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        style={{
-          position: "absolute",
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          background: "rgba(80,150,250,0.95)",
-          border: "4px solid white",
-          cursor: "nwse-resize",
-          ...posStyle,
-        }}
-      />
-    ) : null;
+  const showResizeHandle = editable && selected && !stackEditing;
 
-  const resizeHandle = makeResizeHandle({ right: -16, bottom: -16 });
+  const onDefaultResizeDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!editable || stackEditing) return;
+    e.preventDefault();
+    markEditBegin();
+    setDragging(true);
+    onSelect?.({ elementIndex: index });
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    drag.current = {
+      mode: "resize",
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: element.x,
+      oy: element.y,
+      ow: element.width,
+      oh: bounds.height,
+      aspectRatio:
+        element.kind === "image" && naturalSize
+          ? naturalSize.w / naturalSize.h
+          : undefined,
+    };
+  };
+
+  const onContainResizeDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!containRect || !naturalSize) return;
+    e.preventDefault();
+    markEditBegin();
+    setDragging(true);
+    onSelect?.({ elementIndex: index });
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    drag.current = {
+      mode: "resize",
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: element.x + containRect.left,
+      oy: element.y + containRect.top,
+      ow: containRect.width,
+      oh: containRect.height,
+      containResize: true,
+      aspectRatio: naturalSize.w / naturalSize.h,
+    };
+  };
+
+  const resizeHandle = showResizeHandle ? (
+    <ResizeHandleDot
+      posStyle={{ right: -16, bottom: -16 }}
+      onPointerDown={onDefaultResizeDown}
+      onPointerMove={onMove}
+      onPointerUp={endDrag}
+    />
+  ) : null;
 
   if (element.kind === "stack") {
     return (
@@ -616,15 +654,19 @@ function ElementView({
             }}
           />
         ) : null}
-        {useImageOverlaySelection && containRect
-          ? makeResizeHandle(
-              {
-                left: containRect.left + containRect.width - 16,
-                top: containRect.top + containRect.height - 16,
-              },
-              startContainImageResize,
-            )
-          : resizeHandle}
+        {useImageOverlaySelection && containRect ? (
+          <ResizeHandleDot
+            posStyle={{
+              left: containRect.left + containRect.width - 16,
+              top: containRect.top + containRect.height - 16,
+            }}
+            onPointerDown={onContainResizeDown}
+            onPointerMove={onMove}
+            onPointerUp={endDrag}
+          />
+        ) : (
+          resizeHandle
+        )}
       </div>
     );
   }
@@ -714,12 +756,16 @@ function StackChildView({
             onEditBegin?.();
           }
           (e.currentTarget as Element).setPointerCapture(e.pointerId);
-          const useContainResize = useImageOverlaySelection && containRect && naturalSize;
+          const useContainResize = Boolean(useImageOverlaySelection && containRect && naturalSize);
           drag.current = {
             sx: e.clientX,
             sy: e.clientY,
-            ow: useContainResize ? containRect.width : child.width,
-            oh: useContainResize ? containRect.height : hasHeight ? (child as { height: number }).height : 0,
+            ow: useContainResize && containRect ? containRect.width : child.width,
+            oh: useContainResize && containRect
+              ? containRect.height
+              : hasHeight
+                ? (child as { height: number }).height
+                : 0,
             containResize: useContainResize,
             aspectRatio: naturalSize ? naturalSize.w / naturalSize.h : undefined,
           };

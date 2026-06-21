@@ -1,6 +1,7 @@
 "use client";
 
 import { streamDesign } from "@/hooks/useDesignStream";
+import { trackEvent } from "@/lib/analytics";
 import { clearEditorSession, loadEditorSession } from "@/lib/editorSession";
 import {
   createGeneration,
@@ -70,6 +71,11 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
   const startGeneration = useCallback(
     (prompt: string, slideCount: number) => {
       const gen = createGeneration(prompt, slideCount);
+      trackEvent("create_prompt", {
+        generation_id: gen.id,
+        slide_count: slideCount,
+        prompt_length: prompt.trim().length,
+      });
       setGenerations((prev) => [gen, ...prev]);
       void runStream(gen.id, prompt, slideCount);
       return gen.id;

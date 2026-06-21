@@ -4,6 +4,7 @@ import {
   generateColourPalette,
   toDesignPalette,
 } from "@/lib/colorGenerator";
+import { assembleDesignFromEvents } from "@/lib/designAssembly";
 import type { DesignEvent, UserImageInput } from "@/lib/designEvents";
 import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
 import {
@@ -16,6 +17,7 @@ import {
   TextElementSchema,
   type PaletteOption,
 } from "@/lib/schema";
+import { prisma } from "@/lib/prisma";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
@@ -175,6 +177,31 @@ export async function runDesignGeneration(
 ): Promise<RunDesignGenerationResult> {
   const { prompt, userImages = [], slideCount, onEvent } = opts;
 
+  const promptId = crypto.randomUUID();
+  let savedPromptId: string | null = null;
+  try {
+    await prisma.prompt.create({
+      data: { id: promptId, prompt },
+    });
+    savedPromptId = promptId;
+  } catch (err) {
+    console.warn("failed to save prompt", err);
+  }
+
+  const recordedEvents: DesignEvent[] = [];
+  const savePromptOutput = async () => {
+    if (!savedPromptId) return;
+    try {
+      const output = assembleDesignFromEvents(recordedEvents);
+      await prisma.prompt.update({
+        where: { id: savedPromptId },
+        data: { output: output as object },
+      });
+    } catch (err) {
+      console.warn("failed to save prompt output", err);
+    }
+  };
+
   let enforcedPalette: z.infer<typeof PaletteSchema> | null = null;
   let paletteBrief = "";
   let paletteOptions: PaletteOption[] = [];
@@ -201,7 +228,10 @@ export async function runDesignGeneration(
       ? `\n\nUSER-PROVIDED PHOTOS: The user uploaded ${userImages.length} photo(s) pre-registered as ${userImages.map((_, i) => `user_${i + 1}`).join(", ")}. When the design should feature the user's own photos (headshot, product, team, etc.), use addImageElement or setImageBackground with those imageIds directly — do NOT call generateImage for them.`
       : "";
 
-  const emit = onEvent;
+  const emit = (event: DesignEvent) => {
+    recordedEvents.push(event);
+    onEvent(event);
+  };
 
   const images = new Map<string, { dataUrl: string; prompt: string }>();
   let imageCounter = 0;
@@ -481,12 +511,14 @@ export async function runDesignGeneration(
     });
 
     emit({ type: "done", slideCount: Math.max(slideCountEmitted, 1) });
+    await savePromptOutput();
   } catch (err) {
     console.error("design generation failed", err);
     emit({
       type: "error",
       message: err instanceof Error ? err.message : "Generation failed",
     });
+    await savePromptOutput();
     throw err;
   }
 

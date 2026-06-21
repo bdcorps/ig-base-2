@@ -5,6 +5,7 @@ import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
 import { useGeneration } from "@/context/GenerationsContext";
 import { useSlideEditHistory } from "@/hooks/useSlideEditHistory";
+import { trackEvent } from "@/lib/analytics";
 import { downloadSlidesAsZip } from "@/lib/exportSlides";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import { generationTitle } from "@/lib/generations";
@@ -286,6 +287,10 @@ export default function DesignWorkspace({ id }: Props) {
         .map((el) => el?.querySelector("[data-slide-export]") as HTMLElement | null)
         .filter(Boolean) as HTMLElement[];
       await downloadSlidesAsZip(roots);
+      trackEvent("export_design", {
+        generation_id: id,
+        slide_count: gen.slides.length,
+      });
     } catch (err) {
       updateGeneration(id, {
         error: err instanceof Error ? err.message : "Export failed",
