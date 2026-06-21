@@ -1,9 +1,6 @@
-"use client";
-
 import DesignWorkspace from "@/components/DesignWorkspace";
-import { use } from "react";
 
-export default function DesignPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default async function DesignPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return <DesignWorkspace id={id} />;
 }

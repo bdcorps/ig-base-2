@@ -1,4 +1,4 @@
-import type { DesignEvent } from "@/app/api/design/route";
+import type { DesignEvent } from "@/lib/designEvents";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import {
   applyDesignEvent,

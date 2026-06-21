@@ -32,7 +32,7 @@ export default function GenerationSidebar({ generations }: Props) {
       <div className="p-2">
         <Link
           href="/"
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[14px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
         >
           <svg
             className="h-4 w-4 text-neutral-500"
@@ -96,7 +96,7 @@ export default function GenerationSidebar({ generations }: Props) {
         )}
       </div>
 
-      <div className="border-t border-neutral-200/80 px-4 py-3">
+      {/* <div className="border-t border-neutral-200/80 px-4 py-3">
         <nav className="flex flex-col gap-1 text-[13px]">
           <Link
             href="/templates"
@@ -111,7 +111,7 @@ export default function GenerationSidebar({ generations }: Props) {
             Kanban board
           </Link>
         </nav>
-      </div>
+      </div> */}
     </aside>
   );
 }

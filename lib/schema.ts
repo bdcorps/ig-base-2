@@ -100,10 +100,52 @@ export const ShapeElementSchema = z.object({
   borderRadius: z.number().default(0),
 });
 
+/** Leaf elements inside a stack — positioned by flex, not absolute x/y. */
+const stackChildOmit = { x: true, y: true, rotation: true } as const;
+
+export const StackTextChildSchema = TextElementSchema.omit(stackChildOmit);
+export const StackImageChildSchema = ImageElementSchema.omit(stackChildOmit);
+export const StackShapeChildSchema = ShapeElementSchema.omit(stackChildOmit);
+
+export const StackChildSchema = z.discriminatedUnion("kind", [
+  StackTextChildSchema,
+  StackImageChildSchema,
+  StackShapeChildSchema,
+]);
+
+export const StackElementSchema = z.object({
+  kind: z.literal("stack"),
+  ...positionFields,
+  height: z
+    .number()
+    .optional()
+    .describe("Optional fixed height. Omit to shrink-wrap children."),
+  direction: z
+    .enum(["column", "row"])
+    .default("column")
+    .describe('"column" for vertical stacks (typical), "row" for horizontal.'),
+  gap: z.number().default(24).describe("Space between children in px."),
+  alignItems: z
+    .enum(["start", "center", "end", "stretch"])
+    .default("center")
+    .describe("Cross-axis alignment (e.g. center children horizontally in a column stack)."),
+  justifyContent: z
+    .enum(["start", "center", "end", "space-between"])
+    .default("start")
+    .describe("Main-axis alignment along the stack direction."),
+  paddingX: z.number().default(0),
+  paddingY: z.number().default(0),
+  children: z
+    .array(StackChildSchema)
+    .min(1)
+    .describe("Child elements laid out with flexbox inside this stack."),
+});
+
 export const ElementSchema = z.discriminatedUnion("kind", [
   TextElementSchema,
   ImageElementSchema,
   ShapeElementSchema,
+  StackElementSchema,
 ]);
 
 /**
@@ -147,6 +189,8 @@ export type Background = z.infer<typeof BackgroundSchema>;
 export type TextElement = z.infer<typeof TextElementSchema>;
 export type ImageElement = z.infer<typeof ImageElementSchema>;
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
+export type StackChild = z.infer<typeof StackChildSchema>;
+export type StackElement = z.infer<typeof StackElementSchema>;
 export type SlideElement = z.infer<typeof ElementSchema>;
 export type SlideDesign = z.infer<typeof SlideDesignSchema>;
 

@@ -2,14 +2,16 @@
 
 import Controls from "@/components/Controls";
 import SidebarSection from "@/components/SidebarSection";
-import SlideRenderer from "@/components/SlideRenderer";
+import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
 import { useGeneration } from "@/context/GenerationsContext";
+import { useSlideEditHistory } from "@/hooks/useSlideEditHistory";
 import { downloadSlidesAsZip } from "@/lib/exportSlides";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import { generationTitle } from "@/lib/generations";
-import type { PaletteOption, SlideDesign, SlideElement, Theme } from "@/lib/schema";
+import type { PaletteOption, SlideDesign, SlideElement, StackChild, Theme } from "@/lib/schema";
+import type { SlideState } from "@/lib/slideState";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Props {
   id: string;
@@ -17,10 +19,134 @@ interface Props {
 
 export default function DesignWorkspace({ id }: Props) {
   const { generation, updateGeneration } = useGeneration(id);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selection, setSelection] = useState<ElementSelection | null>(null);
+  const [stackEditIndex, setStackEditIndex] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const restoreSlides = useCallback(
+    (slides: SlideState[]) => {
+      updateGeneration(id, { slides });
+    },
+    [id, updateGeneration],
+  );
+
+  const { pushHistory, undo, redo, canUndo, canRedo } = useSlideEditHistory(
+    generation?.slides ?? [],
+    restoreSlides,
+    generation ? `${id}:${generation.activeSlideIndex}` : id,
+  );
+
+  const deleteSelection = useCallback(() => {
+    if (!generation || !selection) return;
+    pushHistory();
+    const slideIdx = generation.activeSlideIndex;
+
+    if (selection.childIndex != null) {
+      updateGeneration(id, {
+        slides: generation.slides.map((s, i) => {
+          if (i !== slideIdx) return s;
+          const elements = s.design.elements.flatMap((el, j) => {
+            if (j !== selection.elementIndex || el.kind !== "stack") return [el];
+            const children = el.children.filter((_, ci) => ci !== selection.childIndex);
+            if (children.length === 0) return [];
+            return [{ ...el, children }];
+          });
+          return { ...s, design: { ...s.design, elements } };
+        }),
+      });
+      setSelection({ elementIndex: selection.elementIndex });
+      return;
+    }
+
+    updateGeneration(id, {
+      slides: generation.slides.map((s, i) =>
+        i !== slideIdx
+          ? s
+          : {
+            ...s,
+            design: {
+              ...s.design,
+              elements: s.design.elements.filter((_, j) => j !== selection.elementIndex),
+            },
+          },
+      ),
+    });
+    setSelection(null);
+    setStackEditIndex(null);
+  }, [generation, selection, id, updateGeneration, pushHistory]);
+
+  const handleSelect = useCallback(
+    (next: ElementSelection | null) => {
+      setSelection(next);
+      if (next == null) {
+        setStackEditIndex(null);
+        return;
+      }
+      if (next.childIndex != null) {
+        setStackEditIndex(next.elementIndex);
+        return;
+      }
+      const el = generation?.slides[generation.activeSlideIndex]?.design.elements[next.elementIndex];
+      if (el?.kind !== "stack") {
+        setStackEditIndex(null);
+        return;
+      }
+      setStackEditIndex((cur) => (cur === next.elementIndex ? cur : null));
+    },
+    [generation],
+  );
+
+  const enterStackEdit = useCallback((elementIndex: number) => {
+    setStackEditIndex(elementIndex);
+    setSelection({ elementIndex });
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const inField =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable;
+
+      if (e.key === "Escape") {
+        if (inField) return;
+        if (selection?.childIndex != null) {
+          setSelection({ elementIndex: selection.elementIndex });
+        } else if (stackEditIndex != null) {
+          setStackEditIndex(null);
+        } else {
+          setSelection(null);
+        }
+        return;
+      }
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "z" && !e.shiftKey) {
+        if (inField) return;
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (mod && (e.key === "Z" || (e.key === "z" && e.shiftKey))) {
+        if (inField) return;
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      if (e.key !== "Backspace" && e.key !== "Delete") return;
+      if (inField || !selection) return;
+      e.preventDefault();
+      deleteSelection();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selection, stackEditIndex, deleteSelection, undo, redo]);
 
   if (!generation) {
     return (
@@ -39,7 +165,8 @@ export default function DesignWorkspace({ id }: Props) {
   function setActiveSlideIndex(index: number) {
     if (index === gen.activeSlideIndex) return;
     updateGeneration(id, { activeSlideIndex: index });
-    setSelected(null);
+    setSelection(null);
+    setStackEditIndex(null);
   }
 
   function updateTheme(theme: Theme) {
@@ -64,7 +191,8 @@ export default function DesignWorkspace({ id }: Props) {
   const sidebarTheme = activeSlide?.theme ?? DEFAULT_THEME;
   const showThemePanel = Boolean(activeSlide) || gen.generatedPalettes.length > 0;
 
-  function updateElement(index: number, patch: Partial<SlideElement>) {
+  function updateElement(index: number, patch: Partial<SlideElement>, recordHistory = false) {
+    if (recordHistory) pushHistory();
     const slideIdx = gen.activeSlideIndex;
     updateGeneration(id, {
       slides: gen.slides.map((s, i) =>
@@ -83,7 +211,13 @@ export default function DesignWorkspace({ id }: Props) {
     });
   }
 
-  function deleteElement(index: number) {
+  function updateStackChild(
+    stackIndex: number,
+    childIndex: number,
+    patch: Partial<StackChild>,
+    recordHistory = false,
+  ) {
+    if (recordHistory) pushHistory();
     const slideIdx = gen.activeSlideIndex;
     updateGeneration(id, {
       slides: gen.slides.map((s, i) =>
@@ -93,12 +227,19 @@ export default function DesignWorkspace({ id }: Props) {
             ...s,
             design: {
               ...s.design,
-              elements: s.design.elements.filter((_, j) => j !== index),
+              elements: s.design.elements.map((el, j) => {
+                if (j !== stackIndex || el.kind !== "stack") return el;
+                return {
+                  ...el,
+                  children: el.children.map((child, ci) =>
+                    ci === childIndex ? ({ ...child, ...patch } as StackChild) : child,
+                  ),
+                };
+              }),
             },
           },
       ),
     });
-    setSelected(null);
   }
 
   async function copyJson() {
@@ -152,12 +293,31 @@ export default function DesignWorkspace({ id }: Props) {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {gen.status === "running" && (
-              <span className="flex items-center gap-1.5 text-[13px] text-blue-500">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
-                Designing…
-              </span>
+            {gen.slides.length > 0 && gen.status === "complete" && (
+              <>
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={!canUndo}
+                  aria-label="Undo"
+                  title="Undo (⌘Z)"
+                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  onClick={redo}
+                  disabled={!canRedo}
+                  aria-label="Redo"
+                  title="Redo (⌘⇧Z)"
+                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-text-primary transition-colors hover:bg-neutral-50 disabled:opacity-40"
+                >
+                  Redo
+                </button>
+              </>
             )}
+
             {gen.slides.length > 0 && gen.status === "complete" && (
               <button
                 type="button"
@@ -211,7 +371,7 @@ export default function DesignWorkspace({ id }: Props) {
                   return (
                     <div
                       key={i}
-                      className="flex cursor-pointer flex-col items-center gap-2"
+                      className="flex flex-col items-center gap-2"
                       onClick={() => setActiveSlideIndex(i)}
                     >
                       <SlideRenderer
@@ -219,9 +379,13 @@ export default function DesignWorkspace({ id }: Props) {
                         theme={slide.theme}
                         displayWidth={440}
                         editable={isActive}
-                        selectedIndex={isActive ? selected : null}
-                        onSelect={isActive ? setSelected : undefined}
+                        selection={isActive ? selection : null}
+                        stackEditIndex={isActive ? stackEditIndex : null}
+                        onSelect={isActive ? handleSelect : undefined}
+                        onEnterStackEdit={isActive ? enterStackEdit : undefined}
                         onElementChange={isActive ? updateElement : undefined}
+                        onStackChildChange={isActive ? updateStackChild : undefined}
+                        onEditBegin={isActive ? pushHistory : undefined}
                       />
                     </div>
                   );
@@ -241,13 +405,30 @@ export default function DesignWorkspace({ id }: Props) {
 
           {showThemePanel && (
             <aside className="hidden w-[348px] shrink-0 overflow-y-auto border-l border-neutral-200/80 bg-background lg:block">
-              {selected !== null && activeSlide?.design.elements[selected] && (
-                <ElementInspector
-                  element={activeSlide.design.elements[selected]}
-                  onChange={(patch) => updateElement(selected, patch)}
-                  onDelete={() => deleteElement(selected)}
-                />
-              )}
+              {selection !== null && activeSlide && (() => {
+                const el = activeSlide.design.elements[selection.elementIndex];
+                if (!el) return null;
+
+                if (selection.childIndex != null && el.kind === "stack") {
+                  const child = el.children[selection.childIndex];
+                  if (!child) return null;
+                  return (
+                    <StackChildInspector
+                      child={child}
+                      onChange={(patch) =>
+                        updateStackChild(selection.elementIndex, selection.childIndex!, patch, true)
+                      }
+                    />
+                  );
+                }
+
+                return (
+                  <ElementInspector
+                    element={el}
+                    onChange={(patch) => updateElement(selection.elementIndex, patch, true)}
+                  />
+                );
+              })()}
               <Controls
                 theme={sidebarTheme}
                 onChange={updateTheme}
@@ -295,11 +476,9 @@ export default function DesignWorkspace({ id }: Props) {
 function ElementInspector({
   element,
   onChange,
-  onDelete,
 }: {
   element: SlideElement;
   onChange: (patch: Partial<SlideElement>) => void;
-  onDelete: () => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
@@ -317,6 +496,7 @@ function ElementInspector({
     text: "Edit typography, alignment, and dimensions for this text block.",
     image: "Adjust the size and placement of this image element.",
     shape: "Adjust the size and placement of this shape element.",
+    stack: "Flex container — adjust alignment and spacing for grouped children.",
   };
 
   return (
@@ -333,22 +513,63 @@ function ElementInspector({
             {element.kind}
           </p>
           <p className="truncate text-[12px] text-text-secondary">
-            {element.kind === "text" ? element.content.slice(0, 40) : `${element.width}×${"height" in element ? element.height : "—"}px`}
+            {element.kind === "text"
+              ? element.content.slice(0, 40)
+              : element.kind === "stack"
+                ? `${element.children.length} children · ${element.direction}`
+                : `${element.width}×${"height" in element ? element.height : "—"}px`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label="Remove element"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-text-tertiary transition-colors hover:bg-neutral-50 hover:text-text-secondary"
-        >
-          <CloseIcon className="h-3.5 w-3.5" />
-        </button>
       </div>
 
       <div className="flex flex-col gap-3">
         {num("Width", element.width, "width")}
-        {element.kind !== "text" && num("Height", (element as { height: number }).height, "height")}
+        {element.kind === "stack" && (
+          <>
+            {num("Gap", element.gap, "gap")}
+            {num("Padding X", element.paddingX, "paddingX")}
+            {num("Padding Y", element.paddingY, "paddingY")}
+            <SelectField
+              label="Direction"
+              value={element.direction}
+              options={[
+                { value: "column", label: "Column" },
+                { value: "row", label: "Row" },
+              ]}
+              onChange={(value) => onChange({ direction: value as "column" | "row" })}
+            />
+            <SelectField
+              label="Align items"
+              value={element.alignItems}
+              options={[
+                { value: "start", label: "Start" },
+                { value: "center", label: "Center" },
+                { value: "end", label: "End" },
+                { value: "stretch", label: "Stretch" },
+              ]}
+              onChange={(value) =>
+                onChange({ alignItems: value as "start" | "center" | "end" | "stretch" })
+              }
+            />
+            <SelectField
+              label="Justify content"
+              value={element.justifyContent}
+              options={[
+                { value: "start", label: "Start" },
+                { value: "center", label: "Center" },
+                { value: "end", label: "End" },
+                { value: "space-between", label: "Space between" },
+              ]}
+              onChange={(value) =>
+                onChange({
+                  justifyContent: value as "start" | "center" | "end" | "space-between",
+                })
+              }
+            />
+          </>
+        )}
+        {element.kind !== "text" && element.kind !== "stack" && num("Height", (element as { height: number }).height, "height")}
+        {element.kind === "stack" && element.height != null && num("Height", element.height, "height")}
         {element.kind === "text" && (
           <>
             {num("Font size", element.fontSize, "fontSize")}
@@ -375,7 +596,117 @@ function ElementInspector({
   );
 }
 
-function ElementKindIcon({ kind, className }: { kind: SlideElement["kind"]; className?: string }) {
+function StackChildInspector({
+  child,
+  onChange,
+}: {
+  child: StackChild;
+  onChange: (patch: Partial<StackChild>) => void;
+}) {
+  const num = (label: string, value: number, key: string) => (
+    <div>
+      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <input
+        type="number"
+        value={Math.round(value)}
+        onChange={(e) => onChange({ [key]: Number(e.target.value) } as Partial<StackChild>)}
+        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+      />
+    </div>
+  );
+
+  const descriptions: Record<StackChild["kind"], string> = {
+    text: "Edit typography and dimensions for this stack item.",
+    image: "Adjust the size of this stack image.",
+    shape: "Adjust the size of this stack shape.",
+  };
+
+  return (
+    <SidebarSection title="Stack item" description={descriptions[child.kind]}>
+      <div className="mb-4 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-neutral-100">
+          <ElementKindIcon kind={child.kind} className="h-5 w-5 text-text-secondary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium capitalize text-text-base">{child.kind}</p>
+          <p className="truncate text-[12px] text-text-secondary">
+            {child.kind === "text"
+              ? child.content.slice(0, 40)
+              : `${child.width}×${"height" in child ? child.height : "—"}px`}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {num("Width", child.width, "width")}
+        {child.kind !== "text" && num("Height", child.height, "height")}
+        {child.kind === "text" && (
+          <>
+            {num("Font size", child.fontSize, "fontSize")}
+            {num("Weight", child.fontWeight, "fontWeight")}
+            <SelectField
+              label="Align"
+              value={child.align}
+              options={[
+                { value: "left", label: "Left" },
+                { value: "center", label: "Center" },
+                { value: "right", label: "Right" },
+              ]}
+              onChange={(value) => onChange({ align: value as "left" | "center" | "right" })}
+            />
+          </>
+        )}
+      </div>
+    </SidebarSection>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none rounded-lg border border-neutral-200 bg-white py-2.5 pl-3 pr-9 text-[13px] font-medium capitalize text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+      </div>
+    </div>
+  );
+}
+
+function ElementKindIcon({
+  kind,
+  className,
+}: {
+  kind: SlideElement["kind"] | StackChild["kind"];
+  className?: string;
+}) {
+  if (kind === "stack") {
+    return (
+      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    );
+  }
   if (kind === "text") {
     return (
       <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
@@ -393,14 +724,6 @@ function ElementKindIcon({ kind, className }: { kind: SlideElement["kind"]; clas
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
 }
