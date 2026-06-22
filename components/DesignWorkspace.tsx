@@ -154,14 +154,20 @@ export default function DesignWorkspace({ id }: Props) {
 
   useEffect(() => {
     if (
-      generation?.status === "complete" &&
-      generation.promptId &&
-      generation.slides.length > 0 &&
-      !feedbackShownRef.current
+      generation?.status !== "complete" ||
+      !generation.promptId ||
+      generation.slides.length === 0 ||
+      feedbackShownRef.current
     ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
       feedbackShownRef.current = true;
       setFeedbackOpen(true);
-    }
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
   }, [generation?.status, generation?.promptId, generation?.slides.length]);
 
   const submitFeedback = useCallback(
