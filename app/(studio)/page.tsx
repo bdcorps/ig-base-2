@@ -35,7 +35,7 @@ export default function Home() {
           <h1 className="text-[22px] font-normal text-gray-700">
             Make viral carousels for your IG feed with Carousel Studio (Beta)
           </h1>
-          <p className="text-[13px] text-gray-500">Go to ChatGPT, get a prompt for a carousel, paste it in and watch the magic happen.</p>
+          <p className="text-[13px] text-gray-500">Go to Claude, get a prompt for a carousel, paste it in and watch the magic happen.</p>
         </div>
         <PromptBox
           prompt={prompt}
