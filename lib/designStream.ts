@@ -23,6 +23,7 @@ export async function consumeDesignStream(
   signal?: AbortSignal,
   userImages?: UserImageInput[],
   slideCount?: number,
+  templateId?: string,
 ): Promise<void> {
   const res = await fetch("/api/design", {
     method: "POST",
@@ -31,6 +32,7 @@ export async function consumeDesignStream(
       prompt,
       userImages: userImages?.length ? userImages : undefined,
       slideCount,
+      templateId,
     }),
     signal,
   });

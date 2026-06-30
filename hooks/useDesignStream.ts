@@ -11,6 +11,7 @@ export async function streamDesign(
   prompt: string,
   slideCount: number,
   onUpdate: (patch: Partial<Generation>) => void,
+  templateId?: string | null,
 ): Promise<void> {
   onUpdate({
     status: "running",
@@ -24,7 +25,7 @@ export async function streamDesign(
   const res = await fetch("/api/design", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, slideCount }),
+    body: JSON.stringify({ prompt, slideCount, templateId: templateId ?? undefined }),
   });
 
   if (!res.ok || !res.body) {

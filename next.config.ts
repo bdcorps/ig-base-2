@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   skipTrailingSlashRedirect: true,
+  images: {
+    domains: ["lh3.googleusercontent.com"],
+  },
   async rewrites() {
     return [
       {

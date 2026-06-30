@@ -1,7 +1,7 @@
 "use client";
 
 import SidebarSection from "@/components/SidebarSection";
-import { GOOGLE_FONTS, googleFontsHref } from "@/lib/fonts";
+import { FONT_CATEGORIES, googleFontsHref } from "@/lib/fonts";
 import type { Palette, PaletteOption, Theme } from "@/lib/schema";
 import { useEffect, type ReactNode } from "react";
 
@@ -104,10 +104,14 @@ function FontSelect({
           className="w-full appearance-none rounded-lg border border-neutral-200 bg-white py-2.5 pl-3 pr-9 text-[13px] font-medium text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
           style={{ fontFamily: value }}
         >
-          {GOOGLE_FONTS.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
+          {FONT_CATEGORIES.map((cat) => (
+            <optgroup key={cat.label} label={cat.label}>
+              {cat.fonts.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />

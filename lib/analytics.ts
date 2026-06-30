@@ -1,6 +1,6 @@
 import posthog from "posthog-js";
 
-type AnalyticsEvent = "create_prompt" | "export_design" | "submit_feedback";
+type AnalyticsEvent = "create_prompt" | "export_design" | "submit_feedback" | "upload_image";
 
 export function trackEvent(
   event: AnalyticsEvent,

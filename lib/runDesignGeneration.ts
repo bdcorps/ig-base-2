@@ -1,9 +1,6 @@
 import { examples } from "@/exa";
-import {
-  formatPaletteBrief,
-  generateColourPalette,
-  toDesignPalette,
-} from "@/lib/colorGenerator";
+import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brandKit";
+import { resolveBrandPalette } from "@/lib/brandPalette";
 import { assembleDesignFromEvents } from "@/lib/designAssembly";
 import type { DesignEvent, UserImageInput } from "@/lib/designEvents";
 import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
@@ -17,14 +14,20 @@ import {
   ShapeElementSchema,
   StackElementSchema,
   TextElementSchema,
+  type Fonts,
+  type Palette,
   type PaletteOption,
+  type SlideDesign,
+  type SlideElement,
 } from "@/lib/schema";
+import { remixTemplateCover } from "@/lib/templateRemix";
+import { buildCover, findTemplate } from "@/lib/templates";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 
-const MODEL = process.env.DESIGN_MODEL ?? "gemini-2.5-pro";
+const MODEL = process.env.DESIGN_MODEL ?? "gemini-2.5-flash";
 
 const STYLE_REFERENCE_IMAGE_URL =
   "https://i.ibb.co/zTsXjPG1/Clean-Shot-2026-06-20-at-20-50-57.png";
@@ -32,6 +35,27 @@ const STYLE_REFERENCE_IMAGE_URL =
 const gemini = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
+
+/**
+ * Templates may bake a semi-transparent wash (an 8-digit #RRGGBBAA hex) into a
+ * cover shape using the template's own background color. Re-tint any such shape
+ * with the brand background so the cover stays on-brand while keeping the alpha.
+ */
+function rebrandCoverElements(
+  elements: SlideElement[],
+  palette: Palette,
+): SlideElement[] {
+  const alphaHex = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})$/;
+  return elements.map((el) => {
+    if (el.kind === "shape" && typeof el.color === "string") {
+      const match = alphaHex.exec(el.color);
+      if (match) {
+        return { ...el, color: `${palette.background}${match[1]}` };
+      }
+    }
+    return el;
+  });
+}
 
 const SYSTEM_PROMPT = `You are an expert social-media carousel slide designer. Given a brief, you design a complete Instagram carousel — MULTIPLE slides on a fixed ${CANVAS_WIDTH}x${CANVAS_HEIGHT} canvas (portrait 4:5).
 
@@ -168,6 +192,12 @@ export interface RunDesignGenerationOptions {
   prompt: string;
   userImages?: UserImageInput[];
   slideCount?: number;
+  /** When set, remix this template's cover (preserve layout, change text/images)
+   * and generate the remaining slides. Colors + fonts always come from the
+   * brand kit, not the template. */
+  templateId?: string;
+  /** The user's brand kit — drives the palette (AI role-mapped) and fonts. */
+  brandKit?: BrandKit;
   onEvent: DesignEventHandler;
 }
 
@@ -179,7 +209,14 @@ export interface RunDesignGenerationResult {
 export async function runDesignGeneration(
   opts: RunDesignGenerationOptions,
 ): Promise<RunDesignGenerationResult> {
-  const { prompt, userImages = [], slideCount, onEvent } = opts;
+  const {
+    prompt,
+    userImages = [],
+    slideCount,
+    templateId,
+    brandKit = DEFAULT_BRAND_KIT,
+    onEvent,
+  } = opts;
 
   const promptId = crypto.randomUUID();
   let savedPromptId: string | null = null;
@@ -207,26 +244,41 @@ export async function runDesignGeneration(
     }
   };
 
-  let enforcedPalette: z.infer<typeof PaletteSchema> | null = null;
+  // Colors and fonts ALWAYS come from the user's brand kit (never the template).
+  // An LLM maps the brand colors into background/text/accent roles for contrast;
+  // fonts map straight from the kit. The same palette/fonts are enforced on
+  // every slide (the template only contributes layout).
+  const enforcedFonts: Fonts = {
+    heading: brandKit.headingFont,
+    body: brandKit.bodyFont,
+  };
+  let enforcedPalette: Palette | null = null;
   let paletteBrief = "";
   let paletteOptions: PaletteOption[] = [];
-
   try {
-    const colourResult = await generateColourPalette(prompt);
-    enforcedPalette = toDesignPalette(colourResult.selectedPalette);
-    paletteBrief = formatPaletteBrief(colourResult.selectedPalette);
-    paletteOptions = colourResult.palettes.map((palette) => ({
-      id: palette.id,
-      name: palette.name,
-      palette: toDesignPalette(palette),
-    }));
+    enforcedPalette = await resolveBrandPalette(brandKit, prompt);
+    paletteBrief = `\n\nBRAND PALETTE (mandatory — call setPalette with these EXACT hex values on every slide; do not invent other colors):\n- background: ${enforcedPalette.background}\n- text: ${enforcedPalette.text}\n- accent: ${enforcedPalette.accent}\nReuse this same palette across ALL slides. Prefer setSolidBackground with the token "background".`;
+    paletteOptions = [
+      { id: "brand", name: "Brand kit", palette: enforcedPalette },
+    ];
   } catch (err) {
-    console.warn("colour palette pre-generation failed", err);
+    console.warn("brand palette resolution failed", err);
   }
 
-  const slideCountNote = slideCount
-    ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides. Call startSlide for slides 1 through ${slideCount}.`
-    : "\n\nSLIDE COUNT: Infer the number of slides from the brief (typically 3-8). Call startSlide before each slide.";
+  // Template remix: resolve the prebuilt cover layout (colors/fonts come from
+  // the brand kit above, not the template's own theme).
+  const template = templateId ? findTemplate(templateId) : undefined;
+  const coverDesign: SlideDesign | null = template
+    ? template.design ?? buildCover(template)
+    : null;
+
+  const slideCountNote = template
+    ? slideCount
+      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides TOTAL. Slide 1 (the cover) is already built — do NOT call startSlide(1). Call startSlide for slides 2 through ${slideCount}.`
+      : "\n\nSLIDE COUNT: Slide 1 (the cover) is already built — do NOT call startSlide(1). Add the remaining slides (aim for 4-6 slides total). Start at startSlide(2)."
+    : slideCount
+      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides. Call startSlide for slides 1 through ${slideCount}.`
+      : "\n\nSLIDE COUNT: Infer the number of slides from the brief (typically 3-8). Call startSlide before each slide.";
 
   const userImageNote =
     userImages.length > 0
@@ -256,11 +308,13 @@ export async function runDesignGeneration(
     slideIndex: currentSlideIndex,
   });
 
+  const userImageUrls: string[] = [];
   for (const [i, img] of userImages.entries()) {
     const id = `user_${i + 1}`;
     const label = img.name?.trim() || `User photo ${i + 1}`;
     const url = await persistImageUrl(img.dataUrl, id);
     images.set(id, { url, prompt: label });
+    userImageUrls.push(url);
     emit({
       type: "image",
       data: { imageId: id, url, prompt: label },
@@ -277,13 +331,75 @@ export async function runDesignGeneration(
     });
   }
 
+  // Template remix: customize the cover (text + on-demand images) while
+  // preserving its layout, then emit it as slide 1 so the model only has to
+  // generate the remaining slides.
+  let coverCopyNote = "";
+  if (coverDesign && enforcedPalette) {
+    const remixed = await remixTemplateCover({
+      design: coverDesign,
+      prompt,
+      userImageUrls,
+    });
+
+    const coverElements = rebrandCoverElements(
+      remixed.elements,
+      enforcedPalette,
+    );
+
+    currentSlideIndex = 0;
+    emit({ type: "slideStart", data: { index: 0, role: "cover" } });
+    emit(
+      slideScoped({
+        type: "palette",
+        data: { ...enforcedPalette, fonts: enforcedFonts },
+      }),
+    );
+    for (const [imageId, img] of Object.entries(remixed.images)) {
+      images.set(imageId, img);
+      emit({ type: "image", data: { imageId, url: img.url, prompt: img.prompt } });
+    }
+    emit(slideScoped({ type: "background", data: remixed.background }));
+    for (const element of coverElements) {
+      emit(slideScoped({ type: "element", data: element }));
+    }
+
+    slideCountEmitted = 1;
+    slideElementCounts.set(0, coverElements.length);
+
+    const coverText = remixed.elements
+      .flatMap((el) =>
+        el.kind === "text"
+          ? [el.content]
+          : el.kind === "stack"
+            ? el.children.flatMap((c) => (c.kind === "text" ? [c.content] : []))
+            : [],
+      )
+      .filter((t) => t.trim())
+      .join(" / ");
+    coverCopyNote = coverText
+      ? `\n\nCOVER COPY (slide 1, already built — continue this narrative on the next slides):\n${coverText}`
+      : "";
+  }
+
   try {
     await generateText({
       model: gemini(MODEL),
+      maxOutputTokens: 10000,
+      providerOptions: {
+        google: {
+          thinkingConfig: MODEL.includes("pro")
+            ? { thinkingBudget: 128 }
+            : { thinkingBudget: 0 },
+        },
+      },
       system: SYSTEM_PROMPT,
       messages: [
         ...FEW_SHOT_MESSAGES,
-        { role: "user", content: prompt + slideCountNote + userImageNote + paletteBrief },
+        {
+          role: "user",
+          content: prompt + slideCountNote + userImageNote + paletteBrief + coverCopyNote,
+        },
       ],
       tools: {
         startSlide: tool({
@@ -405,7 +521,12 @@ export async function runDesignGeneration(
           inputSchema: PaletteSchema,
           execute: async (palette) => {
             const applied = enforcedPalette ?? palette;
-            emit(slideScoped({ type: "palette", data: applied }));
+            emit(
+              slideScoped({
+                type: "palette",
+                data: { ...applied, fonts: enforcedFonts },
+              }),
+            );
             return { ok: true };
           },
         }),

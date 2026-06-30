@@ -58,9 +58,21 @@ export function applyDesignEvent(
   const slide = next[slideIndex];
 
   if (event.type === "palette") {
+    const data = event.data as SlideState["theme"]["palette"] & {
+      fonts?: SlideState["theme"]["fonts"];
+    };
     next[slideIndex] = {
       ...slide,
-      theme: { ...slide.theme, palette: event.data as SlideState["theme"]["palette"] },
+      theme: {
+        palette: {
+          background: data.background,
+          text: data.text,
+          accent: data.accent,
+        },
+        // The palette event may also carry brand fonts; apply them when present
+        // (otherwise keep whatever fonts the slide already has).
+        fonts: data.fonts ?? slide.theme.fonts,
+      },
     };
   } else if (event.type === "background") {
     next[slideIndex] = {

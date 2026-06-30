@@ -12,22 +12,74 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
 
 interface GenerationsContextValue {
   generations: Generation[];
+  hydrated: boolean;
   updateGeneration: (id: string, patch: Partial<Generation>) => void;
-  startGeneration: (prompt: string, slideCount: number) => string;
+  startGeneration: (
+    prompt: string,
+    slideCount: number,
+    templateId?: string | null,
+  ) => string;
   importFromEditorSession: () => string | null;
   loadSampleDesign: () => string;
 }
 
 const GenerationsContext = createContext<GenerationsContextValue | null>(null);
 
+const STORAGE_KEY = "carousel-generations";
+
+function loadStoredGenerations(): Generation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Generation[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function GenerationsProvider({ children }: { children: ReactNode }) {
   const [generations, setGenerations] = useState<Generation[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Rehydrate completed generations from localStorage so direct navigation /
+  // refresh of /design/[id] still finds the design. Merge with anything already
+  // created this session (e.g. an in-flight import) without clobbering it.
+  useEffect(() => {
+    const stored = loadStoredGenerations();
+    if (stored.length > 0) {
+      setGenerations((prev) => {
+        const existing = new Set(prev.map((g) => g.id));
+        return [...prev, ...stored.filter((g) => !existing.has(g.id))];
+      });
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist terminal (complete/error) generations, debounced so streaming and
+  // canvas edits don't thrash localStorage.
+  useEffect(() => {
+    if (!hydrated) return;
+    const handle = window.setTimeout(() => {
+      const terminal = generations
+        .filter((g) => g.status === "complete" || g.status === "error")
+        .slice(0, 20);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(terminal));
+      } catch {
+        // Ignore quota / serialization errors.
+      }
+    }, 800);
+    return () => window.clearTimeout(handle);
+  }, [generations, hydrated]);
 
   const updateGeneration = useCallback((id: string, patch: Partial<Generation>) => {
     setGenerations((prev) =>
@@ -36,7 +88,12 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const runStream = useCallback(
-    async (id: string, prompt: string, slideCount: number) => {
+    async (
+      id: string,
+      prompt: string,
+      slideCount: number,
+      templateId?: string | null,
+    ) => {
       try {
         await streamDesign(prompt, slideCount, (patch) => {
           setGenerations((prev) =>
@@ -57,7 +114,7 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
               return next;
             }),
           );
-        });
+        }, templateId);
       } catch (err) {
         updateGeneration(id, {
           status: "error",
@@ -69,15 +126,16 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
   );
 
   const startGeneration = useCallback(
-    (prompt: string, slideCount: number) => {
+    (prompt: string, slideCount: number, templateId?: string | null) => {
       const gen = createGeneration(prompt, slideCount);
       trackEvent("create_prompt", {
         generation_id: gen.id,
         slide_count: slideCount,
         prompt_length: prompt.trim().length,
+        ...(templateId ? { template_id: templateId } : {}),
       });
       setGenerations((prev) => [gen, ...prev]);
-      void runStream(gen.id, prompt, slideCount);
+      void runStream(gen.id, prompt, slideCount, templateId);
       return gen.id;
     },
     [runStream],
@@ -87,9 +145,20 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
     const session = loadEditorSession();
     if (!session) return null;
 
-    const gen = createGeneration(session.prompt, 1);
+    const slides =
+      session.slides && session.slides.length > 0
+        ? session.slides
+        : session.design && session.theme
+          ? [{ design: session.design, theme: session.theme }]
+          : [];
+    if (slides.length === 0) {
+      clearEditorSession();
+      return null;
+    }
+
+    const gen = createGeneration(session.prompt, slides.length);
     gen.status = "complete";
-    gen.slides = [{ design: session.design, theme: session.theme }];
+    gen.slides = slides;
     setGenerations((prev) => [gen, ...prev]);
     clearEditorSession();
     return gen.id;
@@ -105,6 +174,7 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
     <GenerationsContext.Provider
       value={{
         generations,
+        hydrated,
         updateGeneration,
         startGeneration,
         importFromEditorSession,
@@ -123,7 +193,7 @@ export function useGenerations() {
 }
 
 export function useGeneration(id: string | undefined) {
-  const { generations, updateGeneration } = useGenerations();
+  const { generations, updateGeneration, hydrated } = useGenerations();
   const generation = generations.find((g) => g.id === id) ?? null;
-  return { generation, updateGeneration };
+  return { generation, updateGeneration, hydrated };
 }

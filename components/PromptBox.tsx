@@ -1,5 +1,6 @@
 "use client";
 
+import TemplatePicker from "@/components/TemplatePicker";
 import { ArrowUp } from "lucide-react";
 
 const EXAMPLE_PROMPTS = [
@@ -102,16 +103,20 @@ Follow @itssukhpalsaini for more founder and personal branding insights.`,
 interface Props {
   prompt: string;
   slideCount: number;
+  templateId: string | null;
   onPromptChange: (value: string) => void;
   onSlideCountChange: (value: number) => void;
+  onTemplateChange: (id: string | null) => void;
   onSubmit: () => void;
 }
 
 export default function PromptBox({
   prompt,
   slideCount,
+  templateId,
   onPromptChange,
   onSlideCountChange,
+  onTemplateChange,
   onSubmit,
 }: Props) {
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -133,7 +138,8 @@ export default function PromptBox({
           placeholder="Describe your carousel — topic, tone, slide count, and any copy you want verbatim…"
         />
 
-        <div className="flex items-center justify-end gap-3 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <TemplatePicker templateId={templateId} onChange={onTemplateChange} />
           <button
             type="button"
             onClick={onSubmit}

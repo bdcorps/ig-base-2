@@ -1,11 +1,15 @@
 import type { SlideDesign, Theme } from "@/lib/schema";
+import type { SlideState } from "@/lib/slideState";
 
 const STORAGE_KEY = "carousel-editor-session";
 
 export interface EditorSession {
   prompt: string;
-  design: SlideDesign;
-  theme: Theme;
+  /** Full multi-slide carousel. Preferred over the single design/theme below. */
+  slides?: SlideState[];
+  /** Legacy single-slide payload (still used when opening one slide in the editor). */
+  design?: SlideDesign;
+  theme?: Theme;
 }
 
 export function saveEditorSession(session: EditorSession): void {

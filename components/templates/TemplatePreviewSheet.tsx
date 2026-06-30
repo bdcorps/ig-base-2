@@ -1,10 +1,10 @@
 "use client";
 
-import type { CarouselTemplate } from "@/lib/templates";
-import { consumeDesignStreamLegacy } from "@/lib/designStream";
+import SlideRenderer from "@/components/SlideRenderer";
+import { buildCover, themeFor, type CarouselTemplate } from "@/lib/templates";
+import { consumeDesignStream } from "@/lib/designStream";
 import { saveEditorSession } from "@/lib/editorSession";
-import { DEFAULT_THEME } from "@/lib/fonts";
-import type { SlideDesign, Theme } from "@/lib/schema";
+import type { SlideState } from "@/lib/slideState";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -44,11 +44,10 @@ export default function TemplatePreviewSheet({
 
   useEffect(() => {
     if (!template) return;
-    const base = template.prompt;
-    const merged = contextPrompt.trim()
-      ? `${contextPrompt.trim()}\n\n${base}`
-      : base;
-    setPrompt(merged);
+    // The template's layout + style now come from its id (server-side remix),
+    // so the prompt is purely the user's brief. Pre-fill only the contextual
+    // prompt (if any); the template's own prompt is no longer merged in.
+    setPrompt(contextPrompt.trim());
     setPhotos([]);
     setError(null);
   }, [template, contextPrompt]);
@@ -85,26 +84,34 @@ export default function TemplatePreviewSheet({
     setLoading(true);
     setError(null);
 
-    let theme: Theme = { ...DEFAULT_THEME };
-    let design: SlideDesign = {
-      background: { type: "solid", color: "background" },
-      elements: [],
-      images: {},
-    };
+    let slides: SlideState[] = [];
 
     try {
-      await consumeDesignStreamLegacy(
+      await consumeDesignStream(
         prompt.trim(),
         (update) => {
-          if (update.type === "palette") theme = update.theme;
-          else if (update.type === "design") design = update.design;
+          if (update.type === "slides") slides = update.slides;
           else if (update.type === "error") throw new Error(update.message);
         },
         undefined,
         photos.map((p) => ({ dataUrl: p.dataUrl, name: p.name })),
+        template.slideCount,
+        template.id,
       );
 
-      saveEditorSession({ prompt: prompt.trim(), design, theme });
+      // The model occasionally finishes a run without adding any visible
+      // elements (sets up a palette/background then stops). Rather than drop
+      // the user onto a blank canvas, fall back to the template's own cover
+      // design so generating from a template always yields something.
+      const hasContent = slides.some((s) => s.design.elements.length > 0);
+      if (!hasContent) {
+        slides = [{ design: buildCover(template), theme: themeFor(template) }];
+      }
+
+      // Colors + fonts come from the user's brand kit and are streamed on the
+      // palette event, so slides already carry the right theme — no override.
+
+      saveEditorSession({ prompt: prompt.trim(), slides });
       onClose();
       router.push("/");
     } catch (err) {
@@ -112,6 +119,17 @@ export default function TemplatePreviewSheet({
     } finally {
       setLoading(false);
     }
+  }
+
+  function seeTemplate() {
+    if (!template) return;
+    const slide: SlideState = {
+      design: buildCover(template),
+      theme: themeFor(template),
+    };
+    saveEditorSession({ prompt: template.prompt, slides: [slide] });
+    onClose();
+    router.push("/");
   }
 
   if (!template) return null;
@@ -142,23 +160,12 @@ export default function TemplatePreviewSheet({
 
         <div className="grid flex-1 overflow-hidden lg:grid-cols-[320px_1fr]">
           <div className="flex items-center justify-center border-b border-neutral-200 bg-neutral-50 p-6 lg:border-b-0 lg:border-r">
-            <div className="relative aspect-9/16 w-full max-w-[280px] overflow-hidden rounded-2xl ring-1 ring-black/5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={template.previewImage}
-                alt={template.title}
-                className="h-full w-full object-cover"
+            <div className="overflow-hidden rounded-2xl ring-1 ring-black/5">
+              <SlideRenderer
+                design={buildCover(template)}
+                theme={themeFor(template)}
+                displayWidth={280}
               />
-              {template.badge && (
-                <span className="absolute bottom-3 right-3 rounded-full bg-[#FF3B30] px-2.5 py-1 text-[10px] font-bold tracking-wide text-white">
-                  {template.badge}
-                </span>
-              )}
-              {template.isNew && (
-                <span className="absolute left-3 top-3 -rotate-6 rounded-md bg-[#FFD60A] px-2 py-0.5 text-[11px] font-bold text-neutral-900">
-                  New!
-                </span>
-              )}
             </div>
           </div>
 
@@ -252,6 +259,14 @@ export default function TemplatePreviewSheet({
                 className="rounded-xl border border-neutral-200 px-5 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={seeTemplate}
+                disabled={loading}
+                className="rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+              >
+                See template
               </button>
               <button
                 type="button"

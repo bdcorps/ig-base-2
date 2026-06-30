@@ -17,6 +17,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "ai": "^6.0.205",
+    "better-auth": "^1.6.22",
     "dotenv": "^17.4.2",
     "html-to-image": "^1.11.13",
     "jpeg-js": "^0.4.4",

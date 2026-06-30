@@ -11,24 +11,18 @@ interface TemplateSectionProps {
 
 export default function TemplateSection({ category, onSelect }: TemplateSectionProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const countLabel = category.displayCount ?? String(category.templates.length);
-
-  const scrollNext = () => {
-    scrollRef.current?.scrollBy({ left: 560, behavior: "smooth" });
-  };
 
   return (
-    <section className="mb-10">
-      <button
-        type="button"
-        className="mb-4 flex items-center gap-2 text-left transition-opacity hover:opacity-70"
-      >
-        <h2 className="text-lg font-semibold tracking-tight text-neutral-800">{category.title}</h2>
+    <section className="mb-9">
+      <div className="mb-3 flex items-baseline gap-2">
+        <h3 className="text-base font-semibold tracking-tight text-neutral-800">
+          {category.title}
+        </h3>
         <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">
-          {countLabel}
+          {category.templates.length}
         </span>
-        <ChevronRight className="text-neutral-400" />
-      </button>
+      </div>
+      <p className="mb-4 -mt-1.5 text-sm text-neutral-500">{category.subtitle}</p>
 
       <div className="relative">
         <div
@@ -41,21 +35,5 @@ export default function TemplateSection({ category, onSelect }: TemplateSectionP
         </div>
       </div>
     </section>
-  );
-}
-
-function ChevronRight({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className={`text-neutral-700 ${className}`}
-    >
-      <path d="M9 18l6-6-6-6" />
-    </svg>
   );
 }

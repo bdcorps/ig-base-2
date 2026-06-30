@@ -1,4 +1,4 @@
-import type { PaletteOption } from "@/lib/schema";
+import type { Fonts, PaletteOption } from "@/lib/schema";
 import {
   ImageElementSchema,
   PaletteSchema,
@@ -20,7 +20,11 @@ type ImageBg = {
 
 export type DesignEvent =
   | { type: "slideStart"; data: { index: number; role?: string } }
-  | { type: "palette"; data: z.infer<typeof PaletteSchema>; slideIndex: number }
+  | {
+      type: "palette";
+      data: z.infer<typeof PaletteSchema> & { fonts?: Fonts };
+      slideIndex: number;
+    }
   | {
       type: "background";
       data: SolidBg | GradientBg | ImageBg;
@@ -59,6 +63,7 @@ export interface DesignRequestInput {
   prompt: string;
   userImages: UserImageInput[];
   slideCount?: number;
+  templateId?: string;
 }
 
 export function parseUserImages(raw: unknown): UserImageInput[] {
@@ -88,9 +93,15 @@ export function parseDesignRequestBody(body: unknown): DesignRequestInput | null
       ? (body as { prompt: string }).prompt.trim()
       : "";
   if (!prompt) return null;
+  const rawTemplateId = (body as { templateId?: unknown }).templateId;
+  const templateId =
+    typeof rawTemplateId === "string" && rawTemplateId.trim()
+      ? rawTemplateId.trim()
+      : undefined;
   return {
     prompt,
     userImages: parseUserImages((body as { userImages?: unknown }).userImages),
     slideCount: parseSlideCount((body as { slideCount?: unknown }).slideCount),
+    templateId,
   };
 }

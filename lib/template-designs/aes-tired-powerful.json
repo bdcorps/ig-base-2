@@ -1,0 +1,169 @@
+{
+  "design": {
+    "background": {
+      "type": "solid",
+      "color": "background"
+    },
+    "elements": [
+      {
+        "kind": "image",
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "rotation": 0,
+        "height": 1350,
+        "imageId": "cover",
+        "fit": "cover",
+        "borderRadius": 0
+      },
+      {
+        "kind": "shape",
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "rotation": 0,
+        "height": 1350,
+        "variant": "rect",
+        "color": "#aeb9c266",
+        "borderRadius": 0
+      },
+      {
+        "kind": "text",
+        "x": 90,
+        "y": 72,
+        "width": 320,
+        "rotation": 0,
+        "content": "YOUR NAME",
+        "font": "body",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "color": "text",
+        "align": "left",
+        "italic": false,
+        "uppercase": true,
+        "lineHeight": 1.1,
+        "letterSpacing": 4,
+        "paddingX": 0,
+        "paddingY": 0,
+        "borderRadius": 0
+      },
+      {
+        "kind": "text",
+        "x": 380,
+        "y": 72,
+        "width": 320,
+        "rotation": 0,
+        "content": "2025",
+        "font": "body",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "color": "text",
+        "align": "center",
+        "italic": false,
+        "uppercase": true,
+        "lineHeight": 1.1,
+        "letterSpacing": 4,
+        "paddingX": 0,
+        "paddingY": 0,
+        "borderRadius": 0
+      },
+      {
+        "kind": "text",
+        "x": 670,
+        "y": 72,
+        "width": 320,
+        "rotation": 0,
+        "content": "Mindset",
+        "font": "body",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "color": "text",
+        "align": "right",
+        "italic": false,
+        "uppercase": true,
+        "lineHeight": 1.1,
+        "letterSpacing": 4,
+        "paddingX": 0,
+        "paddingY": 0,
+        "borderRadius": 0
+      },
+      {
+        "kind": "shape",
+        "x": 90,
+        "y": 132,
+        "width": 900,
+        "rotation": 0,
+        "height": 1,
+        "variant": "rect",
+        "color": "text",
+        "borderRadius": 0
+      },
+      {
+        "kind": "text",
+        "x": 110,
+        "y": 360,
+        "width": 860,
+        "rotation": 0,
+        "content": "You can be tired and still be powerful",
+        "segments": [
+          {
+            "text": "You can be tired and still be "
+          },
+          {
+            "text": "powerful",
+            "italic": true
+          }
+        ],
+        "font": "heading",
+        "fontSize": 83,
+        "fontWeight": 500,
+        "color": "text",
+        "align": "center",
+        "italic": false,
+        "uppercase": false,
+        "lineHeight": 1.1,
+        "letterSpacing": 0,
+        "paddingX": 0,
+        "paddingY": 0,
+        "borderRadius": 0
+      },
+      {
+        "kind": "text",
+        "x": 190,
+        "y": 760,
+        "width": 700,
+        "rotation": 0,
+        "content": "you don't have to prove anything to anyone",
+        "font": "body",
+        "fontSize": 28,
+        "fontWeight": 400,
+        "color": "text",
+        "align": "center",
+        "italic": true,
+        "uppercase": false,
+        "lineHeight": 1.35,
+        "letterSpacing": 1,
+        "paddingX": 0,
+        "paddingY": 0,
+        "borderRadius": 0
+      }
+    ],
+    "images": {
+      "cover": {
+        "url": "/templates/aes-tired-powerful.png",
+        "prompt": "You can be tired and still be powerful"
+      }
+    }
+  },
+  "theme": {
+    "palette": {
+      "background": "#aeb9c2",
+      "text": "#2c343b",
+      "accent": "#5f7682"
+    },
+    "fonts": {
+      "heading": "Fraunces",
+      "body": "Work Sans"
+    }
+  }
+}

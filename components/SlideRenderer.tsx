@@ -201,8 +201,12 @@ function mapJustifyContent(value: StackElement["justifyContent"]): React.CSSProp
   return value;
 }
 
+type Corner = "nw" | "ne" | "sw" | "se";
+
 type DragState = {
   mode: "move" | "resize";
+  /** Which corner is being dragged; the opposite corner stays anchored. */
+  corner?: Corner;
   sx: number;
   sy: number;
   ox: number;
@@ -213,6 +217,10 @@ type DragState = {
   containResize?: boolean;
   aspectRatio?: number;
 };
+
+function cornerCursor(corner: Corner): React.CSSProperties["cursor"] {
+  return corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize";
+}
 
 type StackChildDragState = {
   sx: number;
@@ -296,6 +304,7 @@ function ResizeHandleDot({
         background: "rgba(80,150,250,0.95)",
         border: "4px solid white",
         cursor: "nwse-resize",
+        zIndex: 1,
         ...posStyle,
       }}
     />
@@ -337,10 +346,16 @@ function ElementView({
 }) {
   const drag = useRef<DragState | null>(null);
   const pendingDrag = useRef<{ sx: number; sy: number } | null>(null);
+  const wasSelectedRef = useRef(false);
   const editBeginCalled = useRef(false);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [editing, setEditing] = useState(false);
   const bounds = getElementBounds(element);
+
+  useEffect(() => {
+    if (!selected) setEditing(false);
+  }, [selected]);
   const hasHeight = element.kind === "image" || element.kind === "shape" || (element.kind === "stack" && element.height != null);
   const isStack = element.kind === "stack";
 
@@ -364,7 +379,11 @@ function ElementView({
     markEditBegin();
     setDragging(true);
     onSelect?.({ elementIndex: index });
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    try {
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer may already be released; dragging still works via element events.
+    }
     drag.current = {
       mode,
       sx: e.clientX,
@@ -383,8 +402,20 @@ function ElementView({
   const beginDrag = (mode: DragState["mode"], e: React.PointerEvent) => {
     if (!editable || stackEditing) return;
     e.stopPropagation();
-    if (isStack && mode === "move") {
+    if (mode === "move") {
+      // Defer committing to a drag until the pointer actually moves, so a plain
+      // click can resolve to "select" (first click) or "edit" (second click).
+      // Capture the pointer immediately so move events keep flowing even if the
+      // cursor leaves this element mid-drag.
+      e.preventDefault();
       pendingDrag.current = { sx: e.clientX, sy: e.clientY };
+      wasSelectedRef.current = selected;
+      if (!selected) onSelect?.({ elementIndex: index });
+      try {
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore; not all pointer types support capture.
+      }
       return;
     }
     e.preventDefault();
@@ -394,7 +425,7 @@ function ElementView({
   const onPointerDown = (e: React.PointerEvent) => beginDrag("move", e);
 
   const onPointerMoveWithPending = (e: React.PointerEvent) => {
-    if (isStack && pendingDrag.current && !drag.current) {
+    if (pendingDrag.current && !drag.current) {
       const dx = e.clientX - pendingDrag.current.sx;
       const dy = e.clientY - pendingDrag.current.sy;
       if (Math.hypot(dx, dy) >= 4) {
@@ -406,8 +437,25 @@ function ElementView({
   };
 
   const onPointerUpWithPending = (e: React.PointerEvent) => {
+    const wasClick = Boolean(pendingDrag.current) && !drag.current;
     pendingDrag.current = null;
+    if (wasClick) {
+      try {
+        (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+      } catch {
+        // Capture may not be held; safe to ignore.
+      }
+    }
     endDrag(e);
+    // A click (no drag) on an already-selected element: text becomes editable,
+    // a stack enters child-editing mode.
+    if (wasClick && wasSelectedRef.current) {
+      if (element.kind === "text") {
+        setEditing(true);
+      } else if (isStack) {
+        onEnterStackEdit?.(index);
+      }
+    }
   };
 
   const onMove = (e: React.PointerEvent) => {
@@ -427,22 +475,32 @@ function ElementView({
       } as Partial<SlideElement>);
     } else {
       onSnapGuidesChange?.(null);
-      if (d.containResize) {
-        const newW = Math.max(60, Math.round(d.ow + dx));
-        const newH = Math.max(40, Math.round(newW / (d.aspectRatio ?? 1)));
+      const corner = d.corner ?? "se";
+      const right = corner.includes("e");
+      const bottom = corner.includes("s");
+      // Flip the delta so dragging any corner grows the box outward.
+      const signedDx = right ? dx : -dx;
+      const signedDy = bottom ? dy : -dy;
+      if (d.aspectRatio) {
+        const newW = Math.max(60, Math.round(d.ow + signedDx));
+        const newH = Math.max(40, Math.round(newW / d.aspectRatio));
         onChange?.(index, {
-          x: Math.round(d.ox),
-          y: Math.round(d.oy),
+          x: Math.round(right ? d.ox : d.ox + d.ow - newW),
+          y: Math.round(bottom ? d.oy : d.oy + d.oh - newH),
           width: newW,
           height: newH,
         } as Partial<SlideElement>);
-      } else if (element.kind === "image" && d.aspectRatio) {
-        const newW = Math.max(60, Math.round(d.ow + dx));
-        const newH = Math.max(40, Math.round(newW / d.aspectRatio));
-        onChange?.(index, { width: newW, height: newH } as Partial<SlideElement>);
       } else {
-        const patch: Record<string, number> = { width: Math.max(60, Math.round(d.ow + dx)) };
-        if (hasHeight) patch.height = Math.max(40, Math.round(d.oh + dy));
+        const newW = Math.max(60, Math.round(d.ow + signedDx));
+        const patch: Record<string, number> = {
+          width: newW,
+          x: Math.round(right ? d.ox : d.ox + d.ow - newW),
+        };
+        if (hasHeight) {
+          const newH = Math.max(40, Math.round(d.oh + signedDy));
+          patch.height = newH;
+          patch.y = Math.round(bottom ? d.oy : d.oy + d.oh - newH);
+        }
         onChange?.(index, patch as Partial<SlideElement>);
       }
     }
@@ -476,7 +534,9 @@ function ElementView({
       ? stackEditing
         ? "3px dashed rgba(80,150,250,0.7)"
         : "5px solid rgba(80,150,250,0.95)"
-      : undefined,
+      : hovered && !stackEditing && !useImageOverlaySelection
+        ? "3px solid rgba(80,150,250,0.45)"
+        : undefined,
     outlineOffset: "3px",
     touchAction: editable ? "none" : undefined,
     userSelect: editable ? "none" : undefined,
@@ -503,58 +563,71 @@ function ElementView({
 
   const showResizeHandle = editable && selected && !stackEditing;
 
-  const onDefaultResizeDown = (e: React.PointerEvent) => {
+  const startResize = (corner: Corner, contain: boolean) => (e: React.PointerEvent) => {
     e.stopPropagation();
     if (!editable || stackEditing) return;
+    if (contain && (!containRect || !naturalSize)) return;
     e.preventDefault();
     markEditBegin();
     setDragging(true);
     onSelect?.({ elementIndex: index });
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    drag.current = {
-      mode: "resize",
-      sx: e.clientX,
-      sy: e.clientY,
-      ox: element.x,
-      oy: element.y,
-      ow: element.width,
-      oh: bounds.height,
-      aspectRatio:
-        element.kind === "image" && naturalSize
-          ? naturalSize.w / naturalSize.h
-          : undefined,
-    };
+    drag.current =
+      contain && containRect && naturalSize
+        ? {
+            mode: "resize",
+            corner,
+            sx: e.clientX,
+            sy: e.clientY,
+            ox: element.x + containRect.left,
+            oy: element.y + containRect.top,
+            ow: containRect.width,
+            oh: containRect.height,
+            containResize: true,
+            aspectRatio: naturalSize.w / naturalSize.h,
+          }
+        : {
+            mode: "resize",
+            corner,
+            sx: e.clientX,
+            sy: e.clientY,
+            ox: element.x,
+            oy: element.y,
+            ow: element.width,
+            oh: bounds.height,
+            aspectRatio:
+              element.kind === "image" && naturalSize
+                ? naturalSize.w / naturalSize.h
+                : undefined,
+          };
   };
 
-  const onContainResizeDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    if (!containRect || !naturalSize) return;
-    e.preventDefault();
-    markEditBegin();
-    setDragging(true);
-    onSelect?.({ elementIndex: index });
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    drag.current = {
-      mode: "resize",
-      sx: e.clientX,
-      sy: e.clientY,
-      ox: element.x + containRect.left,
-      oy: element.y + containRect.top,
-      ow: containRect.width,
-      oh: containRect.height,
-      containResize: true,
-      aspectRatio: naturalSize.w / naturalSize.h,
-    };
+  const renderCornerHandles = (contain: boolean, rect?: { left: number; top: number; width: number; height: number }) => {
+    const positions: Record<Corner, React.CSSProperties> = rect
+      ? {
+          nw: { left: rect.left - 16, top: rect.top - 16 },
+          ne: { left: rect.left + rect.width - 16, top: rect.top - 16 },
+          sw: { left: rect.left - 16, top: rect.top + rect.height - 16 },
+          se: { left: rect.left + rect.width - 16, top: rect.top + rect.height - 16 },
+        }
+      : {
+          nw: { left: -16, top: -16 },
+          ne: { right: -16, top: -16 },
+          sw: { left: -16, bottom: -16 },
+          se: { right: -16, bottom: -16 },
+        };
+    return (Object.keys(positions) as Corner[]).map((corner) => (
+      <ResizeHandleDot
+        key={corner}
+        posStyle={{ ...positions[corner], cursor: cornerCursor(corner) }}
+        onPointerDown={startResize(corner, contain)}
+        onPointerMove={onMove}
+        onPointerUp={endDrag}
+      />
+    ));
   };
 
-  const resizeHandle = showResizeHandle ? (
-    <ResizeHandleDot
-      posStyle={{ right: -16, bottom: -16 }}
-      onPointerDown={onDefaultResizeDown}
-      onPointerMove={onMove}
-      onPointerUp={endDrag}
-    />
-  ) : null;
+  const resizeHandle = showResizeHandle ? <>{renderCornerHandles(false)}</> : null;
 
   if (element.kind === "stack") {
     return (
@@ -617,6 +690,8 @@ function ElementView({
           element={element}
           theme={theme}
           editable={editable && !stackEditing}
+          editing={editing}
+          setEditing={setEditing}
           onContentChange={(content) =>
             onChange?.(index, { content, segments: undefined } as Partial<SlideElement>)
           }
@@ -656,15 +731,7 @@ function ElementView({
           />
         ) : null}
         {useImageOverlaySelection && containRect ? (
-          <ResizeHandleDot
-            posStyle={{
-              left: containRect.left + containRect.width - 16,
-              top: containRect.top + containRect.height - 16,
-            }}
-            onPointerDown={onContainResizeDown}
-            onPointerMove={onMove}
-            onPointerUp={endDrag}
-          />
+          renderCornerHandles(true, containRect)
         ) : (
           resizeHandle
         )}
@@ -705,9 +772,15 @@ function StackChildView({
   const stretch = stack.alignItems === "stretch";
   const pill = child.kind === "text" && isTextPill(child);
   const drag = useRef<StackChildDragState | null>(null);
+  const wasSelectedRef = useRef(false);
   const editBeginCalled = useRef(false);
   const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
   const hasHeight = child.kind !== "text";
+
+  useEffect(() => {
+    if (!selected) setEditing(false);
+  }, [selected]);
 
   const imageSrc = child.kind === "image" ? design.images[child.imageId]?.url : undefined;
   const naturalSize = useImageNaturalSize(imageSrc);
@@ -722,7 +795,11 @@ function StackChildView({
     maxWidth: "100%",
     flexShrink: 0,
     position: "relative",
-    outline: selected && !useImageOverlaySelection ? "4px solid rgba(80,150,250,0.95)" : undefined,
+    outline: selected && !useImageOverlaySelection
+      ? "4px solid rgba(80,150,250,0.95)"
+      : hovered && !useImageOverlaySelection
+        ? "2px solid rgba(80,150,250,0.45)"
+        : undefined,
     outlineOffset: "2px",
     cursor: editable ? (hovered ? "pointer" : "default") : "default",
     touchAction: editable ? "none" : undefined,
@@ -740,7 +817,12 @@ function StackChildView({
         ...hoverHandlers,
         onPointerDown: (e: React.PointerEvent) => {
           e.stopPropagation();
-          onSelect();
+          wasSelectedRef.current = selected;
+          if (!selected) onSelect();
+        },
+        onPointerUp: () => {
+          // Second click on an already-selected text child enters edit mode.
+          if (wasSelectedRef.current && child.kind === "text") setEditing(true);
         },
         onDoubleClick: (e: React.MouseEvent) => e.stopPropagation(),
       }
@@ -791,11 +873,13 @@ function StackChildView({
           }
         }}
         onPointerUp={(e) => {
+          e.stopPropagation();
           (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
           drag.current = null;
           editBeginCalled.current = false;
         }}
         onPointerCancel={(e) => {
+          e.stopPropagation();
           (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
           drag.current = null;
           editBeginCalled.current = false;
@@ -826,6 +910,8 @@ function StackChildView({
           element={child}
           theme={theme}
           editable={editable}
+          editing={editing}
+          setEditing={setEditing}
           onContentChange={(content) =>
             onChange?.({ content, segments: undefined } as Partial<StackChild>)
           }
@@ -929,7 +1015,13 @@ function TextContent({
     <div style={textContentStyle(element, theme)}>
       {hasSegments
         ? element.segments!.map((seg, i) => (
-            <span key={i} style={{ color: resolveColor(seg.color, theme.palette) }}>
+            <span
+              key={i}
+              style={{
+                color: resolveColor(seg.color, theme.palette),
+                fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
+              }}
+            >
               {normalizeTextNewlines(seg.text)}
             </span>
           ))
@@ -942,16 +1034,19 @@ function EditableTextContent({
   element,
   theme,
   editable,
+  editing,
+  setEditing,
   onContentChange,
   onEditBegin,
 }: {
   element: TextElementLike;
   theme: Theme;
   editable: boolean;
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
   onContentChange: (content: string) => void;
   onEditBegin?: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const editRef = useRef<HTMLDivElement>(null);
   const displayContent = normalizeTextNewlines(element.content);
   const draftRef = useRef(displayContent);
@@ -966,7 +1061,6 @@ function EditableTextContent({
     const sel = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(editRef.current);
-    range.collapse(false);
     sel?.removeAllRanges();
     sel?.addRange(range);
   }, [editing]);
@@ -985,6 +1079,21 @@ function EditableTextContent({
     if (editRef.current) editRef.current.innerText = displayContent;
   };
 
+  // Commit and exit edit mode when the user clicks anywhere outside the text.
+  // Capture phase runs before the canvas' deselect handler so the latest text
+  // is read while the editable node is still mounted.
+  useEffect(() => {
+    if (!editing) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        commit();
+      }
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
   if (!editable) {
     return <TextContent element={element} theme={theme} />;
   }
@@ -996,6 +1105,9 @@ function EditableTextContent({
         contentEditable
         suppressContentEditableWarning
         onPointerDown={(e) => e.stopPropagation()}
+        onInput={() => {
+          draftRef.current = editRef.current?.innerText ?? draftRef.current;
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -1023,17 +1135,17 @@ function EditableTextContent({
 
   return (
     <div
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        draftRef.current = displayContent;
-        setEditing(true);
-      }}
-      title="Double-click to edit"
       style={{ ...textContentStyle(element, theme), cursor: "text" }}
     >
       {element.segments && element.segments.length > 0
         ? element.segments.map((seg, i) => (
-            <span key={i} style={{ color: resolveColor(seg.color, theme.palette) }}>
+            <span
+              key={i}
+              style={{
+                color: resolveColor(seg.color, theme.palette),
+                fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
+              }}
+            >
               {normalizeTextNewlines(seg.text)}
             </span>
           ))

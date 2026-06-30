@@ -1,19 +1,33 @@
-import { GoogleGenAI, Modality, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 
 /**
- * Generate images with Gemini 3.1 Flash Image and return base64 data URLs.
- * Used by the design agent's generateImage / generateSticker tools.
+ * Generate images with Gemini "Nano Banana" (gemini-2.5-flash-image) and return
+ * base64 data URLs. Used by the design agent's generateImage / generateSticker
+ * tools and the aesthetic template cover-photo generator.
  *
- * Requires GEMINI_API_KEY in the environment.
+ * Requires one of GOOGLE_GENERATIVE_AI_PRO_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY,
+ * or GEMINI_API_KEY. Override the model with GEMINI_IMAGE_MODEL.
  */
 
-const MODEL = "gemini-3.1-flash-image";
+const MODEL = process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image";
+
+/** First available Google Generative AI key, in priority order. */
+export function resolveGeminiApiKey(): string | undefined {
+  return (
+    process.env.GOOGLE_GENERATIVE_AI_PRO_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    undefined
+  );
+}
 
 let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
+    throw new Error(
+      "No Gemini API key set (GOOGLE_GENERATIVE_AI_PRO_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY)",
+    );
   }
   client ??= new GoogleGenAI({ apiKey });
   return client;
@@ -42,9 +56,6 @@ export async function generateImage(
       },
     ],
     config: {
-      thinkingConfig: {
-        thinkingLevel: ThinkingLevel.MINIMAL,
-      },
       imageConfig: {
         aspectRatio: ASPECT_RATIO[aspect],
         imageSize: "1K",

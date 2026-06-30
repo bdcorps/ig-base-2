@@ -54,6 +54,12 @@ export const TextSegmentSchema = z.object({
   color: ColorSchema.optional().describe(
     "Optional color override for this run (e.g. \"accent\" to highlight a word). Defaults to the element color.",
   ),
+  italic: z
+    .boolean()
+    .optional()
+    .describe(
+      "Optional italic override for this run (e.g. to set a highlighted word in italic script). Defaults to the element's italic value.",
+    ),
 });
 
 export const TextElementSchema = z.object({

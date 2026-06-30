@@ -10,7 +10,15 @@ import { trackEvent } from "@/lib/analytics";
 import { downloadSlidesAsZip } from "@/lib/exportSlides";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import { generationTitle } from "@/lib/generations";
-import type { PaletteOption, SlideDesign, SlideElement, StackChild, Theme } from "@/lib/schema";
+import type {
+  ImageElement,
+  PaletteOption,
+  SlideDesign,
+  SlideElement,
+  StackChild,
+  Theme,
+} from "@/lib/schema";
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/schema";
 import type { SlideState } from "@/lib/slideState";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,7 +28,7 @@ interface Props {
 }
 
 export default function DesignWorkspace({ id }: Props) {
-  const { generation, updateGeneration } = useGeneration(id);
+  const { generation, updateGeneration, hydrated } = useGeneration(id);
   const [selection, setSelection] = useState<ElementSelection | null>(null);
   const [stackEditIndex, setStackEditIndex] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -153,6 +161,22 @@ export default function DesignWorkspace({ id }: Props) {
   }, [selection, stackEditIndex, deleteSelection, undo, redo]);
 
   useEffect(() => {
+    if (selection == null) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("[data-active-canvas]") || target?.closest("[data-inspector]")) {
+        return;
+      }
+      setSelection(null);
+      setStackEditIndex(null);
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [selection]);
+
+  useEffect(() => {
     if (
       generation?.status !== "complete" ||
       !generation.promptId ||
@@ -196,6 +220,13 @@ export default function DesignWorkspace({ id }: Props) {
   );
 
   if (!generation) {
+    if (!hydrated) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+          <p className="text-[14px] text-text-tertiary">Loading design…</p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
         <p className="text-[14px] text-secondary">Design not found</p>
@@ -346,6 +377,78 @@ export default function DesignWorkspace({ id }: Props) {
     }
   }
 
+  async function addImageFromFile(file: File) {
+    if (!activeSlide) return;
+    const dataUrl = await readImageFile(file);
+    const { width: naturalW, height: naturalH } = await readImageDimensions(dataUrl);
+    const { url, imageId } = await uploadImage(dataUrl);
+    const targetWidth = Math.round(CANVAS_WIDTH * 0.6);
+    const ratio = naturalW > 0 ? naturalH / naturalW : 1;
+    const width = targetWidth;
+    const height = Math.round(targetWidth * ratio);
+    const newElement: ImageElement = {
+      kind: "image",
+      x: Math.round((CANVAS_WIDTH - width) / 2),
+      y: Math.round((CANVAS_HEIGHT - height) / 2),
+      width,
+      height,
+      rotation: 0,
+      imageId,
+      fit: "cover",
+      borderRadius: 0,
+    };
+
+    pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    const newIndex = activeSlide.design.elements.length;
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx
+          ? s
+          : {
+            ...s,
+            design: {
+              ...s.design,
+              images: {
+                ...s.design.images,
+                [imageId]: { url, prompt: file.name },
+              },
+              elements: [...s.design.elements, newElement],
+            },
+          },
+      ),
+    });
+    setSelection({ elementIndex: newIndex });
+    setStackEditIndex(null);
+    trackEvent("upload_image", { generation_id: id, slide_index: slideIdx });
+  }
+
+  function dragHasFile(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.items ?? []).some((item) => item.kind === "file");
+  }
+
+  function onCanvasDragOver(e: React.DragEvent) {
+    if (!activeSlide || !dragHasFile(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  async function onCanvasDrop(e: React.DragEvent) {
+    if (!activeSlide) return;
+    e.preventDefault();
+    const file = Array.from(e.dataTransfer.files ?? []).find((f) =>
+      f.type.startsWith("image/"),
+    );
+    if (!file) return;
+    try {
+      await addImageFromFile(file);
+    } catch (err) {
+      updateGeneration(id, {
+        error: err instanceof Error ? err.message : "Failed to add image",
+      });
+    }
+  }
+
   if (gen.status === "error" && gen.slides.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
@@ -417,7 +520,11 @@ export default function DesignWorkspace({ id }: Props) {
         </header>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <section className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <section
+            className="flex min-w-0 flex-1 flex-col overflow-y-auto"
+            onDragOver={onCanvasDragOver}
+            onDrop={onCanvasDrop}
+          >
             <div className="flex flex-col items-center gap-10 px-8 py-6">
               {gen.slides.length > 0 ? (
                 gen.slides.map((slide, i) => {
@@ -426,6 +533,7 @@ export default function DesignWorkspace({ id }: Props) {
                     <div
                       key={i}
                       className="flex flex-col items-center gap-2"
+                      data-active-canvas={isActive ? "" : undefined}
                       onClick={() => setActiveSlideIndex(i)}
                     >
                       <SlideRenderer
@@ -458,7 +566,10 @@ export default function DesignWorkspace({ id }: Props) {
           </section>
 
           {showThemePanel && (
-            <aside className="hidden w-[348px] shrink-0 overflow-y-auto border-l border-neutral-200/80 bg-background lg:block">
+            <aside
+              data-inspector=""
+              className="hidden w-[348px] shrink-0 overflow-y-auto border-l border-neutral-200/80 bg-background lg:block"
+            >
               {selection !== null && activeSlide && (() => {
                 const el = activeSlide.design.elements[selection.elementIndex];
                 if (!el) return null;
@@ -546,6 +657,29 @@ function readImageFile(file: File): Promise<string> {
   });
 }
 
+function readImageDimensions(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("Could not read image"));
+    img.src = url;
+  });
+}
+
+/** Upload an image data URL to R2 (via the API) and return its hosted URL + id. */
+async function uploadImage(dataUrl: string): Promise<{ url: string; imageId: string }> {
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataUrl }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "Failed to upload image");
+  }
+  return res.json() as Promise<{ url: string; imageId: string }>;
+}
+
 function ElementInspector({
   element,
   images,
@@ -569,32 +703,12 @@ function ElementInspector({
     </div>
   );
 
-  const elementDescriptions: Record<SlideElement["kind"], string> = {
-    text: "Edit typography, alignment, and dimensions for this text block.",
-    image: "Adjust the size and placement of this image element.",
-    shape: "Adjust the size and placement of this shape element.",
-    stack: "Flex container — adjust alignment and spacing for grouped children.",
-  };
-
   return (
     <SidebarSection
       title="Element"
-      description={elementDescriptions[element.kind]}
+      description=""
     >
       <div className="flex flex-col gap-3">
-        {element.kind === "text" && (
-          <div>
-            <p className="mb-2 text-[12px] text-secondary">Content</p>
-            <textarea
-              value={element.content}
-              onChange={(e) =>
-                onChange({ content: e.target.value, segments: undefined } as Partial<SlideElement>)
-              }
-              rows={4}
-              className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
-            />
-          </div>
-        )}
         {element.kind === "image" && (
           <ImageInspectorFields
             imageId={element.imageId}
@@ -606,7 +720,6 @@ function ElementInspector({
             onImageChange={onImageChange}
           />
         )}
-        {num("Width", element.width, "width")}
         {element.kind === "stack" && (
           <>
             {num("Gap", element.gap, "gap")}
@@ -651,8 +764,6 @@ function ElementInspector({
             />
           </>
         )}
-        {element.kind !== "text" && element.kind !== "stack" && num("Height", (element as { height: number }).height, "height")}
-        {element.kind === "stack" && element.height != null && num("Height", element.height, "height")}
         {element.kind === "text" && (
           <>
             {num("Font size", element.fontSize, "fontSize")}
@@ -698,21 +809,35 @@ function ImageInspectorFields({
 }) {
   const image = images[imageId];
 
+  const [uploading, setUploading] = useState(false);
+
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const url = await readImageFile(file);
-    onImageChange(imageId, { url, prompt: file.name });
     e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataUrl = await readImageFile(file);
+      const { url } = await uploadImage(dataUrl);
+      onImageChange(imageId, { url, prompt: file.name });
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
     <>
       <div>
         <p className="mb-2 text-[12px] text-secondary">Replace image</p>
-        <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50">
-          Choose file…
-          <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+        <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 has-disabled:cursor-not-allowed has-disabled:opacity-50">
+          {uploading ? "Uploading…" : "Choose file…"}
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={onFileChange}
+            disabled={uploading}
+          />
         </label>
       </div>
       <SelectField
