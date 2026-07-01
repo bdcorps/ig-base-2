@@ -1,4 +1,9 @@
 import { examples } from "@/exa";
+import {
+  buildAuthorImageElement,
+  buildAuthorPromptNote,
+  loadAuthorPhoto,
+} from "@/lib/authorPhoto";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brandKit";
 import { resolveBrandPalette } from "@/lib/brandPalette";
 import { assembleDesignFromEvents } from "@/lib/designAssembly";
@@ -61,7 +66,8 @@ const SYSTEM_PROMPT = `You are an expert social-media carousel slide designer. G
 
 CAROUSEL STRUCTURE
 - Design every slide the brief calls for (typically 3-8 slides). If a slide count is specified, match it exactly.
-- Typical flow: hook slide → 2-5 content/tip slides → optional CTA/closing slide.
+- ALWAYS start with an intro slide and ALWAYS finish with an end slide. The first slide is the intro/hook (title + a compelling reason to keep swiping). The last slide is the end/closing slide (a wrap-up, summary, or CTA such as "Follow for more", "Save this", or "Swipe back to start").
+- Required flow: intro slide → 1+ content/tip slides → end/closing slide. Even at the minimum slide count, the first slide MUST be the intro and the last slide MUST be the end slide.
 - Keep a cohesive visual system across slides: reuse the same palette tokens and font roles; vary layout and copy per slide.
 - Each slide is independent — call startSlide before building each one.
 
@@ -274,11 +280,11 @@ export async function runDesignGeneration(
 
   const slideCountNote = template
     ? slideCount
-      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides TOTAL. Slide 1 (the cover) is already built — do NOT call startSlide(1). Call startSlide for slides 2 through ${slideCount}.`
-      : "\n\nSLIDE COUNT: Slide 1 (the cover) is already built — do NOT call startSlide(1). Add the remaining slides (aim for 4-6 slides total). Start at startSlide(2)."
+      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides TOTAL. Slide 1 (the cover) is already built and serves as the intro slide — do NOT call startSlide(1). Call startSlide for slides 2 through ${slideCount}, and make the LAST slide (${slideCount}) an end/closing slide.`
+      : "\n\nSLIDE COUNT: Slide 1 (the cover) is already built and serves as the intro slide — do NOT call startSlide(1). Add the remaining slides (aim for 4-6 slides total). Start at startSlide(2), and make the LAST slide an end/closing slide."
     : slideCount
-      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides. Call startSlide for slides 1 through ${slideCount}.`
-      : "\n\nSLIDE COUNT: Infer the number of slides from the brief (typically 3-8). Call startSlide before each slide.";
+      ? `\n\nSLIDE COUNT: Design exactly ${slideCount} slides. Call startSlide for slides 1 through ${slideCount}. Slide 1 MUST be the intro slide and slide ${slideCount} MUST be the end/closing slide.`
+      : "\n\nSLIDE COUNT: Infer the number of slides from the brief (typically 3-8). Call startSlide before each slide. The first slide MUST be the intro slide and the last slide MUST be the end/closing slide.";
 
   const userImageNote =
     userImages.length > 0
@@ -318,6 +324,24 @@ export async function runDesignGeneration(
     emit({
       type: "image",
       data: { imageId: id, url, prompt: label },
+    });
+  }
+
+  // Register the author headshot (the user's uploaded, R2-hosted photo) so it
+  // can be referenced (by id) on the intro slide of every carousel.
+  const authorPhoto = loadAuthorPhoto(brandKit);
+  if (authorPhoto) {
+    images.set(authorPhoto.imageId, {
+      url: authorPhoto.url,
+      prompt: authorPhoto.prompt,
+    });
+    emit({
+      type: "image",
+      data: {
+        imageId: authorPhoto.imageId,
+        url: authorPhoto.url,
+        prompt: authorPhoto.prompt,
+      },
     });
   }
 
@@ -363,6 +387,9 @@ export async function runDesignGeneration(
     for (const element of coverElements) {
       emit(slideScoped({ type: "element", data: element }));
     }
+    if (authorPhoto) {
+      emit(slideScoped({ type: "element", data: buildAuthorImageElement() }));
+    }
 
     slideCountEmitted = 1;
     slideElementCounts.set(0, coverElements.length);
@@ -398,7 +425,15 @@ export async function runDesignGeneration(
         ...FEW_SHOT_MESSAGES,
         {
           role: "user",
-          content: prompt + slideCountNote + userImageNote + paletteBrief + coverCopyNote,
+          content:
+            prompt +
+            slideCountNote +
+            userImageNote +
+            paletteBrief +
+            (authorPhoto && !coverDesign
+              ? buildAuthorPromptNote(authorPhoto.url)
+              : "") +
+            coverCopyNote,
         },
       ],
       tools: {
@@ -648,6 +683,13 @@ export async function runDesignGeneration(
       },
       stopWhen: stepCountIs(Math.min(160, 28 + (slideCount ?? 6) * 24)),
     });
+
+    // In non-template mode the model builds the intro slide (index 0); place the
+    // author headshot on it deterministically once generation is done. (Template
+    // covers get the headshot inline above.)
+    if (authorPhoto && !coverDesign) {
+      emit({ type: "element", data: buildAuthorImageElement(), slideIndex: 0 });
+    }
 
     const assembled = assembleDesignFromEvents([
       ...recordedEvents,

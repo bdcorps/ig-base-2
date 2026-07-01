@@ -2,6 +2,23 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/schema";
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
 
+/** Capture slide DOM nodes at full canvas resolution as PNG data URLs. */
+export async function captureSlidesAsDataUrls(
+  slideRoots: HTMLElement[],
+): Promise<string[]> {
+  const urls: string[] = [];
+  for (const root of slideRoots) {
+    const dataUrl = await toPng(root, {
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
+      pixelRatio: 1,
+      cacheBust: true,
+    });
+    urls.push(dataUrl);
+  }
+  return urls;
+}
+
 /** Capture slide DOM nodes at full canvas resolution and download as a ZIP of PNGs. */
 export async function downloadSlidesAsZip(
   slideRoots: HTMLElement[],

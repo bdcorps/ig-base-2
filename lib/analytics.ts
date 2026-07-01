@@ -1,6 +1,12 @@
 import posthog from "posthog-js";
 
-type AnalyticsEvent = "create_prompt" | "export_design" | "submit_feedback" | "upload_image";
+type AnalyticsEvent =
+  | "create_prompt"
+  | "export_design"
+  | "submit_feedback"
+  | "upload_image"
+  | "mask_image_into_shape"
+  | "post_to_instagram";
 
 export function trackEvent(
   event: AnalyticsEvent,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SHAPE_VARIANT_IDS } from "./shapes";
 
 /**
  * The design schema is the single source of truth shared by the agent
@@ -101,9 +102,17 @@ export const ShapeElementSchema = z.object({
   kind: z.literal("shape"),
   ...positionFields,
   height: z.number(),
-  variant: z.enum(["rect", "pill", "circle"]),
+  variant: z.enum(SHAPE_VARIANT_IDS),
   color: ColorSchema,
   borderRadius: z.number().default(0),
+  imageId: z
+    .string()
+    .optional()
+    .describe("Optional image clipped to this shape. Set by dragging an image into the shape."),
+  fit: z
+    .enum(["cover", "contain"])
+    .optional()
+    .describe("How a masked image fills the shape. Defaults to cover."),
 });
 
 /** Leaf elements inside a stack — positioned by flex, not absolute x/y. */

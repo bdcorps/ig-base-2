@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "@/lib/auth-client";
 import {
   type AuthorPhoto,
   type BrandColor,
@@ -7,7 +8,6 @@ import {
   DEFAULT_BRAND_KIT,
 } from "@/lib/brandKit";
 import { FONT_CATEGORIES, GOOGLE_FONTS, googleFontsHref } from "@/lib/fonts";
-import { useSession } from "@/lib/auth-client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -161,13 +161,18 @@ export default function SettingsScreen() {
       const uploaded: AuthorPhoto[] = [];
       for (const file of toUpload) {
         const dataUrl = await fileToDataUrl(file);
+        // Upload to R2 (falls back to a data URL in local dev).
         const url = await uploadImage(dataUrl);
         uploaded.push({ id: `photo-${Date.now()}-${uploaded.length}`, url });
       }
-      setBrandKit((kit) => ({
-        ...kit,
-        authorPhotos: [...kit.authorPhotos, ...uploaded],
-      }));
+      if (uploaded.length === 0) return;
+      const nextKit: BrandKit = {
+        ...brandKit,
+        authorPhotos: [...brandKit.authorPhotos, ...uploaded],
+      };
+      setBrandKit(nextKit);
+      // Persist immediately so the R2 URLs are stored in the DB.
+      await save(nextKit, profile?.bio ?? "");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -175,10 +180,12 @@ export default function SettingsScreen() {
   }
 
   function removePhoto(id: string) {
-    setBrandKit((kit) => ({
-      ...kit,
-      authorPhotos: kit.authorPhotos.filter((p) => p.id !== id),
-    }));
+    const nextKit: BrandKit = {
+      ...brandKit,
+      authorPhotos: brandKit.authorPhotos.filter((p) => p.id !== id),
+    };
+    setBrandKit(nextKit);
+    void save(nextKit, profile?.bio ?? "");
   }
 
   if (!sessionPending && !session?.user) {
@@ -195,7 +202,7 @@ export default function SettingsScreen() {
       <div className="mx-auto w-full max-w-3xl px-8 py-10">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900">Settings</h1>
+            <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
             <p className="mt-1 text-[14px] text-neutral-500">
               Manage your profile and brand kit for your carousels.
             </p>
@@ -224,8 +231,7 @@ export default function SettingsScreen() {
           <div className="space-y-6">
             {/* Profile */}
             <section className="rounded-2xl border border-neutral-200/80 bg-white p-6">
-              <h2 className="text-[15px] font-semibold text-neutral-900">Profile</h2>
-              <p className="mt-0.5 text-[13px] text-neutral-500">Your logged-in account details.</p>
+              <h2 className="text-lg font-semibold text-neutral-900">Profile</h2>
 
               <div className="mt-5 flex items-center gap-4">
                 {profile?.image ? (
@@ -263,12 +269,12 @@ export default function SettingsScreen() {
               </div>
             </section>
 
+            {/* Instagram */}
+            <InstagramSettingsSection returnTo="/settings" />
+
             {/* Brand kit */}
             <section className="rounded-2xl border border-neutral-200/80 bg-white p-6">
-              <h2 className="text-[15px] font-semibold text-neutral-900">Brand kit</h2>
-              <p className="mt-0.5 text-[13px] text-neutral-500">
-                Colors, fonts, and author photos applied to your designs.
-              </p>
+              <h2 className="text-lg font-semibold text-neutral-900">Brand kit</h2>
 
               {/* Colors */}
               <div className="mt-6">
@@ -316,11 +322,10 @@ export default function SettingsScreen() {
                         <button
                           type="button"
                           onClick={() => setMainColor(color.id)}
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                            color.isMain
-                              ? "bg-neutral-900 text-white"
-                              : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
-                          }`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${color.isMain
+                            ? "bg-neutral-900 text-white"
+                            : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
+                            }`}
                         >
                           {color.isMain ? "Main" : "Set main"}
                         </button>
@@ -455,14 +460,119 @@ export default function SettingsScreen() {
                   hidden
                   onChange={(e) => handleFiles(e.target.files)}
                 />
-                <p className="mt-2 text-[12px] text-neutral-400">
-                  Upload multiple photos of yourself to feature across your carousels.
-                </p>
               </div>
             </section>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+interface InstagramStatus {
+  connected: boolean;
+  username: string | null;
+  avatarUrl: string | null;
+  configured: boolean;
+}
+
+function InstagramSettingsSection({ returnTo }: { returnTo: string }) {
+  const [status, setStatus] = useState<InstagramStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/instagram");
+      if (res.ok) setStatus((await res.json()) as InstagramStatus);
+    } catch {
+      // Ignore — leave prior status.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/instagram");
+        if (active && res.ok) setStatus((await res.json()) as InstagramStatus);
+      } catch {
+        // Ignore.
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const connect = useCallback(() => {
+    window.location.href = `/api/instagram/oauth/start?returnTo=${encodeURIComponent(returnTo)}`;
+  }, [returnTo]);
+
+  const disconnect = useCallback(async () => {
+    await fetch("/api/instagram", { method: "DELETE" });
+    await refresh();
+  }, [refresh]);
+
+  return (
+    <section className="rounded-2xl border border-neutral-200/80 bg-white p-6">
+      <h2 className="text-lg font-semibold text-neutral-900">Instagram</h2>
+      <p className="mt-1 text-[13px] text-neutral-500">
+        Connect your account to publish carousels straight to your feed.
+      </p>
+
+      <div className="mt-5">
+        {loading ? (
+          <div className="h-16 w-full animate-pulse rounded-xl bg-neutral-100" />
+        ) : status?.connected ? (
+          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 p-3">
+            <span className="h-11 w-11 shrink-0 rounded-full bg-linear-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[2px]">
+              <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white">
+                {status.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={status.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  <span className="text-[14px] font-semibold text-neutral-500">
+                    {(status.username ?? "?").charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </span>
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold text-neutral-900">
+                @{status.username}
+              </p>
+              <p className="text-[12px] text-neutral-500">Connected</p>
+            </div>
+            <button
+              type="button"
+              onClick={disconnect}
+              className="ml-auto rounded-lg border border-neutral-200 px-3 py-1.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-dashed border-neutral-300 p-4">
+            <p className="text-[13px] text-neutral-500">
+              {status && !status.configured
+                ? "Instagram posting isn't set up on this server yet."
+                : "No account connected yet."}
+            </p>
+            <button
+              type="button"
+              onClick={connect}
+              disabled={Boolean(status && !status.configured)}
+              className="shrink-0 rounded-lg bg-linear-to-r from-purple-600 via-pink-500 to-orange-500 px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Connect Instagram
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

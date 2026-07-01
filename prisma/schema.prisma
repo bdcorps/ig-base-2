@@ -31,6 +31,18 @@ model User {
   // }
   brandKit Json?
 
+  // Connected Instagram account stored as JSON with structure:
+  // {
+  //   igUserId: string,
+  //   username: string,
+  //   avatarUrl?: string,
+  //   accessToken: string,
+  //   tokenExpiresAt?: string (ISO),
+  //   connectedAt: string (ISO),
+  //   demo?: boolean
+  // }
+  instagram Json?
+
   @@unique([email])
   @@map("user")
 }

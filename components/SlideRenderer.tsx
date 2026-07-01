@@ -18,6 +18,11 @@ import {
   type Theme,
 } from "@/lib/schema";
 import { normalizeTextNewlines } from "@/lib/textContent";
+import {
+  findShapeIndexAt,
+  shapeBorderRadius,
+  shapeClipPath,
+} from "@/lib/shapes";
 
 interface Props {
   design: SlideDesign;
@@ -37,6 +42,11 @@ interface Props {
   onStackChildChange?: (stackIndex: number, childIndex: number, patch: Partial<StackChild>) => void;
   /** Called once when a drag/resize gesture begins (for undo history). */
   onEditBegin?: () => void;
+  /**
+   * Called when an image element is dragged and released with its center over a
+   * shape, so the parent can mask the image into that shape.
+   */
+  onImageDropOnShape?: (imageIndex: number, shapeIndex: number) => void;
 }
 
 export type ElementSelection = {
@@ -57,10 +67,12 @@ export default function SlideRenderer({
   onElementChange,
   onStackChildChange,
   onEditBegin,
+  onImageDropOnShape,
 }: Props) {
   const scale = displayWidth / CANVAS_WIDTH;
   const displayHeight = CANVAS_HEIGHT * scale;
   const [snapGuides, setSnapGuides] = useState<SnapGuides | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
   return (
     <div
@@ -104,12 +116,15 @@ export default function SlideRenderer({
               selection?.elementIndex === i ? (selection.childIndex ?? null) : null
             }
             stackEditing={stackEditIndex === i}
+            isDropTarget={dropTargetIndex === i}
             onSelect={onSelect}
             onEnterStackEdit={onEnterStackEdit}
             onChange={onElementChange}
             onStackChildChange={onStackChildChange}
             onEditBegin={onEditBegin}
             onSnapGuidesChange={setSnapGuides}
+            onDragOverShape={onImageDropOnShape ? setDropTargetIndex : undefined}
+            onImageDropOnShape={onImageDropOnShape}
           />
         ))}
       </div>
@@ -321,12 +336,15 @@ function ElementView({
   selected,
   selectedChildIndex,
   stackEditing,
+  isDropTarget,
   onSelect,
   onEnterStackEdit,
   onChange,
   onStackChildChange,
   onEditBegin,
   onSnapGuidesChange,
+  onDragOverShape,
+  onImageDropOnShape,
 }: {
   element: SlideElement;
   index: number;
@@ -337,17 +355,22 @@ function ElementView({
   selected: boolean;
   selectedChildIndex: number | null;
   stackEditing: boolean;
+  isDropTarget: boolean;
   onSelect?: (selection: ElementSelection | null) => void;
   onEnterStackEdit?: (elementIndex: number) => void;
   onChange?: (index: number, patch: Partial<SlideElement>) => void;
   onStackChildChange?: (stackIndex: number, childIndex: number, patch: Partial<StackChild>) => void;
   onEditBegin?: () => void;
   onSnapGuidesChange?: (guides: SnapGuides | null) => void;
+  onDragOverShape?: (shapeIndex: number | null) => void;
+  onImageDropOnShape?: (imageIndex: number, shapeIndex: number) => void;
 }) {
   const drag = useRef<DragState | null>(null);
   const pendingDrag = useRef<{ sx: number; sy: number } | null>(null);
   const wasSelectedRef = useRef(false);
   const editBeginCalled = useRef(false);
+  /** Shape index the dragged image currently hovers over (-1 when none). */
+  const hoverShapeRef = useRef(-1);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -438,6 +461,8 @@ function ElementView({
 
   const onPointerUpWithPending = (e: React.PointerEvent) => {
     const wasClick = Boolean(pendingDrag.current) && !drag.current;
+    const wasImageMove = drag.current?.mode === "move" && element.kind === "image";
+    const dropShapeIndex = hoverShapeRef.current;
     pendingDrag.current = null;
     if (wasClick) {
       try {
@@ -447,6 +472,10 @@ function ElementView({
       }
     }
     endDrag(e);
+    // Dropped an image with its center over a shape → mask it into the shape.
+    if (wasImageMove && dropShapeIndex !== -1) {
+      onImageDropOnShape?.(index, dropShapeIndex);
+    }
     // A click (no drag) on an already-selected element: text becomes editable,
     // a stack enters child-editing mode.
     if (wasClick && wasSelectedRef.current) {
@@ -473,6 +502,16 @@ function ElementView({
         x: snapped.x,
         y: snapped.y,
       } as Partial<SlideElement>);
+      // While dragging an image, highlight any shape it can be masked into.
+      if (element.kind === "image" && onDragOverShape) {
+        const cx = snapped.x + d.ow / 2;
+        const cy = snapped.y + d.oh / 2;
+        const shapeIdx = findShapeIndexAt(design.elements, cx, cy, index);
+        if (shapeIdx !== hoverShapeRef.current) {
+          hoverShapeRef.current = shapeIdx;
+          onDragOverShape(shapeIdx === -1 ? null : shapeIdx);
+        }
+      }
     } else {
       onSnapGuidesChange?.(null);
       const corner = d.corner ?? "se";
@@ -513,6 +552,10 @@ function ElementView({
     editBeginCalled.current = false;
     setDragging(false);
     onSnapGuidesChange?.(null);
+    if (hoverShapeRef.current !== -1) {
+      hoverShapeRef.current = -1;
+      onDragOverShape?.(null);
+    }
   };
 
   const hoverHandlers = editable
@@ -740,8 +783,62 @@ function ElementView({
   }
 
   return (
-    <div {...interaction} style={{ ...base, height: element.height, ...shapeStyle(element, theme) }}>
+    <div
+      {...interaction}
+      style={{
+        ...base,
+        height: element.height,
+        outline: isDropTarget
+          ? "5px solid rgba(80,150,250,0.95)"
+          : base.outline,
+        outlineOffset: "3px",
+      }}
+    >
+      <ShapeFill element={element} design={design} theme={theme} />
       {resizeHandle}
+    </div>
+  );
+}
+
+/** Renders a shape's fill: a solid color, or an image masked to the shape. */
+function ShapeFill({
+  element,
+  design,
+  theme,
+}: {
+  element: Extract<SlideElement | StackChild, { kind: "shape" }>;
+  design: SlideDesign;
+  theme: Theme;
+}) {
+  const clipPath = shapeClipPath(element.variant);
+  const radius = shapeBorderRadius(element.variant, element.height, element.borderRadius);
+  const src = element.imageId ? design.images[element.imageId]?.url : undefined;
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        borderRadius: radius,
+        clipPath,
+        WebkitClipPath: clipPath,
+        background: src ? undefined : resolveColor(element.color, theme.palette),
+      }}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: element.fit ?? "cover",
+            pointerEvents: "none",
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -961,7 +1058,8 @@ function StackChildView({
   }
 
   return (
-    <div {...interaction} style={{ ...wrapperStyle, height: child.height, ...shapeStyle(child, theme) }}>
+    <div {...interaction} style={{ ...wrapperStyle, height: child.height }}>
+      <ShapeFill element={child} design={design} theme={theme} />
       {resizeHandle}
     </div>
   );
@@ -1191,18 +1289,3 @@ function ImageContent({
   );
 }
 
-function shapeStyle(
-  element: Extract<SlideElement | StackChild, { kind: "shape" }>,
-  theme: Theme,
-): React.CSSProperties {
-  const radius =
-    element.variant === "circle"
-      ? "50%"
-      : element.variant === "pill"
-        ? element.height / 2
-        : element.borderRadius;
-  return {
-    background: resolveColor(element.color, theme.palette),
-    borderRadius: radius,
-  };
-}

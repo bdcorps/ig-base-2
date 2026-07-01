@@ -2,17 +2,20 @@
 
 import Controls from "@/components/Controls";
 import FeedbackModal from "@/components/FeedbackModal";
+import PostToInstagramModal from "@/components/PostToInstagramModal";
 import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
 import { useGeneration } from "@/context/GenerationsContext";
 import { useSlideEditHistory } from "@/hooks/useSlideEditHistory";
 import { trackEvent } from "@/lib/analytics";
-import { downloadSlidesAsZip } from "@/lib/exportSlides";
+import { captureSlidesAsDataUrls, downloadSlidesAsZip } from "@/lib/exportSlides";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import { generationTitle } from "@/lib/generations";
+import { SHAPE_VARIANTS, shapeClipPath, type ShapeVariant } from "@/lib/shapes";
 import type {
   ImageElement,
   PaletteOption,
+  ShapeElement,
   SlideDesign,
   SlideElement,
   StackChild,
@@ -33,7 +36,9 @@ export default function DesignWorkspace({ id }: Props) {
   const [stackEditIndex, setStackEditIndex] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [postOpen, setPostOpen] = useState(false);
   const feedbackShownRef = useRef(false);
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -193,6 +198,23 @@ export default function DesignWorkspace({ id }: Props) {
 
     return () => window.clearTimeout(timer);
   }, [generation?.status, generation?.promptId, generation?.slides.length]);
+
+  // Re-open the post modal after returning from the Instagram OAuth round-trip
+  // (start route redirects back to /design/[id]?post=1&ig=...), then clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("post") === "1") {
+      setPostOpen(true);
+      params.delete("post");
+      params.delete("ig");
+      const query = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+    }
+  }, []);
 
   const submitFeedback = useCallback(
     async (rating: number, comment: string) => {
@@ -355,6 +377,14 @@ export default function DesignWorkspace({ id }: Props) {
     setMenuOpen(false);
   }
 
+  const captureSlideImages = useCallback(async () => {
+    await document.fonts.ready;
+    const roots = exportRefs.current
+      .map((el) => el?.querySelector("[data-slide-export]") as HTMLElement | null)
+      .filter(Boolean) as HTMLElement[];
+    return captureSlidesAsDataUrls(roots);
+  }, []);
+
   async function downloadZip() {
     if (gen.slides.length === 0) return;
     setExporting(true);
@@ -423,6 +453,98 @@ export default function DesignWorkspace({ id }: Props) {
     trackEvent("upload_image", { generation_id: id, slide_index: slideIdx });
   }
 
+  function addShape(variant: ShapeVariant) {
+    if (!activeSlide) return;
+    const size = 480;
+    const newShape: ShapeElement = {
+      kind: "shape",
+      x: Math.round((CANVAS_WIDTH - size) / 2),
+      y: Math.round((CANVAS_HEIGHT - size) / 2),
+      width: size,
+      height: size,
+      rotation: 0,
+      variant,
+      color: "accent",
+      borderRadius: variant === "rect" ? 48 : 0,
+    };
+    pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    const newIndex = activeSlide.design.elements.length;
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx
+          ? s
+          : { ...s, design: { ...s.design, elements: [...s.design.elements, newShape] } },
+      ),
+    });
+    setSelection({ elementIndex: newIndex });
+    setStackEditIndex(null);
+    setShapeMenuOpen(false);
+  }
+
+  /** Mask an image element into a shape: the shape holds the image, the standalone image is removed. */
+  function maskImageIntoShape(imageIndex: number, shapeIndex: number) {
+    if (!activeSlide) return;
+    const els = activeSlide.design.elements;
+    const img = els[imageIndex];
+    const shape = els[shapeIndex];
+    if (img?.kind !== "image" || shape?.kind !== "shape") return;
+    pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    const nextElements = els
+      .map((el, i) =>
+        i === shapeIndex && el.kind === "shape"
+          ? ({ ...el, imageId: img.imageId, fit: img.fit } as SlideElement)
+          : el,
+      )
+      .filter((_, i) => i !== imageIndex);
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx ? s : { ...s, design: { ...s.design, elements: nextElements } },
+      ),
+    });
+    // Removing the image shifts indices after it down by one.
+    setSelection({ elementIndex: imageIndex < shapeIndex ? shapeIndex - 1 : shapeIndex });
+    setStackEditIndex(null);
+    trackEvent("mask_image_into_shape", { generation_id: id, slide_index: slideIdx });
+  }
+
+  /** Pull a masked image back out of a shape into its own image element. */
+  function separateShapeImage(shapeIndex: number) {
+    if (!activeSlide) return;
+    const els = activeSlide.design.elements;
+    const shape = els[shapeIndex];
+    if (shape?.kind !== "shape" || !shape.imageId) return;
+    pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    const restored: ImageElement = {
+      kind: "image",
+      x: shape.x,
+      y: shape.y,
+      width: shape.width,
+      height: shape.height,
+      rotation: shape.rotation ?? 0,
+      imageId: shape.imageId,
+      fit: shape.fit ?? "cover",
+      borderRadius: 0,
+    };
+    const nextElements: SlideElement[] = [
+      ...els.map((el, i) =>
+        i === shapeIndex && el.kind === "shape"
+          ? ({ ...el, imageId: undefined } as SlideElement)
+          : el,
+      ),
+      restored,
+    ];
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx ? s : { ...s, design: { ...s.design, elements: nextElements } },
+      ),
+    });
+    setSelection({ elementIndex: nextElements.length - 1 });
+    setStackEditIndex(null);
+  }
+
   function dragHasFile(e: React.DragEvent) {
     return Array.from(e.dataTransfer.items ?? []).some((item) => item.kind === "file");
   }
@@ -475,15 +597,61 @@ export default function DesignWorkspace({ id }: Props) {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {activeSlide && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShapeMenuOpen((v) => !v)}
+                  className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+                  aria-expanded={shapeMenuOpen}
+                >
+                  <ShapePlusIcon className="h-4 w-4" />
+                  Add shape
+                </button>
+                {shapeMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="fixed inset-0 z-10 cursor-default"
+                      aria-label="Close menu"
+                      onClick={() => setShapeMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 top-full z-20 mt-1 grid w-[200px] grid-cols-2 gap-1 rounded-lg border border-neutral-200 bg-white p-1.5 shadow-sm">
+                      {SHAPE_VARIANTS.map((v) => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => addShape(v.id)}
+                          className="flex flex-col items-center gap-1.5 rounded-md px-2 py-2 text-[12px] text-primary hover:bg-neutral-50"
+                        >
+                          <ShapeGlyph variant={v.id} className="h-6 w-6 text-secondary" />
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {gen.slides.length > 0 && gen.status === "complete" && (
-              <button
-                type="button"
-                onClick={downloadZip}
-                disabled={exporting}
-                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
-              >
-                {exporting ? "Exporting…" : "Export"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={downloadZip}
+                  disabled={exporting}
+                  className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  {exporting ? "Exporting…" : "Export"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPostOpen(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-pink-500 via-red-500 to-yellow-500 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm transition-opacity hover:opacity-95"
+                >
+                  <InstagramGlyph className="h-4 w-4" />
+                  Post to IG
+                </button>
+              </>
             )}
             <div className="relative">
               <button
@@ -548,6 +716,7 @@ export default function DesignWorkspace({ id }: Props) {
                         onElementChange={isActive ? updateElement : undefined}
                         onStackChildChange={isActive ? updateStackChild : undefined}
                         onEditBegin={isActive ? pushHistory : undefined}
+                        onImageDropOnShape={isActive ? maskImageIntoShape : undefined}
                       />
                     </div>
                   );
@@ -580,7 +749,6 @@ export default function DesignWorkspace({ id }: Props) {
                   return (
                     <StackChildInspector
                       child={child}
-                      images={activeSlide.design.images}
                       onChange={(patch) =>
                         updateStackChild(selection.elementIndex, selection.childIndex!, patch, true)
                       }
@@ -592,9 +760,9 @@ export default function DesignWorkspace({ id }: Props) {
                 return (
                   <ElementInspector
                     element={el}
-                    images={activeSlide.design.images}
                     onChange={(patch) => updateElement(selection.elementIndex, patch, true)}
                     onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
+                    onSeparateImage={() => separateShapeImage(selection.elementIndex)}
                   />
                 );
               })()}
@@ -644,6 +812,15 @@ export default function DesignWorkspace({ id }: Props) {
         onClose={() => setFeedbackOpen(false)}
         onSubmit={submitFeedback}
       />
+
+      <PostToInstagramModal
+        open={postOpen}
+        onClose={() => setPostOpen(false)}
+        slides={gen.slides}
+        prompt={gen.prompt}
+        captureSlideImages={captureSlideImages}
+        returnTo={`/design/${id}?post=1`}
+      />
     </>
   );
 }
@@ -682,14 +859,14 @@ async function uploadImage(dataUrl: string): Promise<{ url: string; imageId: str
 
 function ElementInspector({
   element,
-  images,
   onChange,
   onImageChange,
+  onSeparateImage,
 }: {
   element: SlideElement;
-  images: SlideDesign["images"];
   onChange: (patch: Partial<SlideElement>) => void;
   onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
+  onSeparateImage: () => void;
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
@@ -712,12 +889,19 @@ function ElementInspector({
         {element.kind === "image" && (
           <ImageInspectorFields
             imageId={element.imageId}
-            images={images}
             fit={element.fit}
             borderRadius={element.borderRadius}
             onFitChange={(fit) => onChange({ fit } as Partial<SlideElement>)}
             onBorderRadiusChange={(borderRadius) => onChange({ borderRadius } as Partial<SlideElement>)}
             onImageChange={onImageChange}
+          />
+        )}
+        {element.kind === "shape" && (
+          <ShapeInspectorFields
+            element={element}
+            onChange={onChange}
+            onImageChange={onImageChange}
+            onSeparateImage={onSeparateImage}
           />
         )}
         {element.kind === "stack" && (
@@ -790,25 +974,13 @@ function ElementInspector({
   );
 }
 
-function ImageInspectorFields({
+function ReplaceImageField({
   imageId,
-  images,
-  fit,
-  borderRadius,
-  onFitChange,
-  onBorderRadiusChange,
   onImageChange,
 }: {
   imageId: string;
-  images: SlideDesign["images"];
-  fit: "cover" | "contain";
-  borderRadius: number;
-  onFitChange: (fit: "cover" | "contain") => void;
-  onBorderRadiusChange: (borderRadius: number) => void;
   onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
-  const image = images[imageId];
-
   const [uploading, setUploading] = useState(false);
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -826,20 +998,40 @@ function ImageInspectorFields({
   }
 
   return (
+    <div>
+      <p className="mb-2 text-[12px] text-secondary">Replace image</p>
+      <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 has-disabled:cursor-not-allowed has-disabled:opacity-50">
+        {uploading ? "Uploading…" : "Choose file…"}
+        <input
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={onFileChange}
+          disabled={uploading}
+        />
+      </label>
+    </div>
+  );
+}
+
+function ImageInspectorFields({
+  imageId,
+  fit,
+  borderRadius,
+  onFitChange,
+  onBorderRadiusChange,
+  onImageChange,
+}: {
+  imageId: string;
+  fit: "cover" | "contain";
+  borderRadius: number;
+  onFitChange: (fit: "cover" | "contain") => void;
+  onBorderRadiusChange: (borderRadius: number) => void;
+  onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
+}) {
+  return (
     <>
-      <div>
-        <p className="mb-2 text-[12px] text-secondary">Replace image</p>
-        <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 has-disabled:cursor-not-allowed has-disabled:opacity-50">
-          {uploading ? "Uploading…" : "Choose file…"}
-          <input
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={onFileChange}
-            disabled={uploading}
-          />
-        </label>
-      </div>
+      <ReplaceImageField imageId={imageId} onImageChange={onImageChange} />
       <SelectField
         label="Fit"
         value={fit}
@@ -862,14 +1054,85 @@ function ImageInspectorFields({
   );
 }
 
+function ShapeInspectorFields({
+  element,
+  onChange,
+  onImageChange,
+  onSeparateImage,
+}: {
+  element: ShapeElement;
+  onChange: (patch: Partial<SlideElement>) => void;
+  onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
+  onSeparateImage: () => void;
+}) {
+  const hasImage = Boolean(element.imageId);
+  return (
+    <>
+      <SelectField
+        label="Shape"
+        value={element.variant}
+        options={SHAPE_VARIANTS.map((v) => ({ value: v.id, label: v.label }))}
+        onChange={(value) => onChange({ variant: value as ShapeVariant })}
+      />
+      {hasImage ? (
+        <>
+          <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-neutral-100">
+              <ElementKindIcon kind="image" className="h-5 w-5 text-secondary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-text-base">Masked image</p>
+              <p className="truncate text-[12px] text-secondary">Clipped to this shape</p>
+            </div>
+          </div>
+          <SelectField
+            label="Image fit"
+            value={element.fit ?? "cover"}
+            options={[
+              { value: "cover", label: "Cover" },
+              { value: "contain", label: "Contain" },
+            ]}
+            onChange={(value) => onChange({ fit: value as "cover" | "contain" })}
+          />
+          {element.imageId && (
+            <ReplaceImageField imageId={element.imageId} onImageChange={onImageChange} />
+          )}
+          <button
+            type="button"
+            onClick={onSeparateImage}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+          >
+            <SeparateIcon className="h-4 w-4" />
+            Separate image
+          </button>
+        </>
+      ) : (
+        <>
+          <SelectField
+            label="Color"
+            value={element.color}
+            options={[
+              { value: "accent", label: "Accent" },
+              { value: "background", label: "Background" },
+              { value: "text", label: "Text" },
+            ]}
+            onChange={(value) => onChange({ color: value })}
+          />
+          <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[12px] leading-relaxed text-secondary">
+            Drag an image onto this shape to mask it into the shape.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
 function StackChildInspector({
   child,
-  images,
   onChange,
   onImageChange,
 }: {
   child: StackChild;
-  images: SlideDesign["images"];
   onChange: (patch: Partial<StackChild>) => void;
   onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
@@ -924,7 +1187,6 @@ function StackChildInspector({
         {child.kind === "image" && (
           <ImageInspectorFields
             imageId={child.imageId}
-            images={images}
             fit={child.fit}
             borderRadius={child.borderRadius}
             onFitChange={(fit) => onChange({ fit } as Partial<StackChild>)}
@@ -1022,6 +1284,51 @@ function ElementKindIcon({
   );
 }
 
+function ShapePlusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h9a1 1 0 011 1v6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5v13a1 1 0 001 1h6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14v6m3-3h-6" />
+    </svg>
+  );
+}
+
+function SeparateIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H5a1 1 0 00-1 1v4m0 4v4a1 1 0 001 1h4m6-14h4a1 1 0 011 1v4m0 4v4a1 1 0 01-1 1h-4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" strokeDasharray="2 3" />
+    </svg>
+  );
+}
+
+/** Small filled preview of a shape variant for the "Add shape" menu. */
+function ShapeGlyph({ variant, className }: { variant: ShapeVariant; className?: string }) {
+  const clip = shapeClipPath(variant);
+  const radius =
+    variant === "circle" || variant === "pill"
+      ? "9999px"
+      : variant === "rect"
+        ? "3px"
+        : "0";
+  return (
+    <span className={className} style={{ display: "inline-block" }} aria-hidden>
+      <span
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          background: "currentColor",
+          borderRadius: radius,
+          clipPath: clip,
+          WebkitClipPath: clip,
+        }}
+      />
+    </span>
+  );
+}
+
 function ChevronDownIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -1055,6 +1362,16 @@ function EllipsisIcon({ className }: { className?: string }) {
       <circle cx="5" cy="12" r="1.5" />
       <circle cx="12" cy="12" r="1.5" />
       <circle cx="19" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+function InstagramGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9} aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
