@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth";
 import { DEFAULT_BRAND_KIT, normalizeBrandKit } from "@/lib/brandKit";
 import { prisma } from "@/lib/prisma";
@@ -54,7 +55,7 @@ export async function PUT(request: Request) {
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      brandKit,
+      brandKit: brandKit as unknown as Prisma.InputJsonValue,
       ...(bio != null ? { bio } : {}),
     },
     select: { name: true, email: true, image: true, bio: true, brandKit: true },

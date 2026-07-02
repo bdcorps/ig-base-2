@@ -8,7 +8,7 @@ import { headers } from "next/headers";
 export type { DesignEvent } from "@/lib/designEvents";
 
 // Image generation can take a while; allow a generous budget.
-export const maxDuration = 120;
+export const maxDuration = 800;
 
 /** Load the signed-in user's brand kit (colors + fonts) for the generation. */
 async function loadBrandKit(): Promise<BrandKit> {

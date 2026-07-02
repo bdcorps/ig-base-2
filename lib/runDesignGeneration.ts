@@ -8,7 +8,12 @@ import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brandKit";
 import { resolveBrandPalette } from "@/lib/brandPalette";
 import { assembleDesignFromEvents } from "@/lib/designAssembly";
 import type { DesignEvent, UserImageInput } from "@/lib/designEvents";
-import { generateImage, generateSticker, type ImageAspect } from "@/lib/gemini";
+import {
+  generateImage,
+  generateImageFromReference,
+  generateSticker,
+  type ImageAspect,
+} from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
 import { persistImageUrl } from "@/lib/r2";
 import {
@@ -30,6 +35,8 @@ import { buildCover, findTemplate } from "@/lib/templates";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
+import { promises as fs } from "fs";
+import path from "path";
 import { z } from "zod";
 
 const MODEL = process.env.DESIGN_MODEL ?? "gemini-2.5-flash";
@@ -40,6 +47,50 @@ const STYLE_REFERENCE_IMAGE_URL =
 const gemini = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
+
+/**
+ * Build the image-to-image instruction for the carousel's background asset.
+ * A reference design from public/bg-references is passed alongside this prompt;
+ * the model reproduces its composition/texture/mood but recolors it into the
+ * brand palette. Output is a single full-bleed portrait background.
+ */
+function buildBackgroundImagePrompt(palette: Palette): string {
+  return [
+    "Recreate the attached image as a single, full-bleed Instagram carousel background — portrait 4:5.",
+    "Keep the same overall composition, texture, grain, shapes, and mood as the reference,",
+    "but RECOLOR it to this brand palette:",
+    `dominant/base color ${palette.background}, secondary/accent color ${palette.accent}, and subtle darker details in ${palette.text}.`,
+    "Keep it soft and elegant with calm negative space for text.",
+    "Absolutely NO text, letters, words, logos, watermarks, people, or product objects — only the abstract background style, recolored.",
+  ].join(" ");
+}
+
+/**
+ * Load a random reference background from public/bg-references as a data URL,
+ * to seed the image-to-image background generation. Returns null if none exist.
+ */
+async function loadRandomBgReference(): Promise<string | null> {
+  try {
+    const dir = path.join(process.cwd(), "public", "bg-references");
+    const files = (await fs.readdir(dir)).filter((f) =>
+      /\.(png|jpe?g|webp)$/i.test(f),
+    );
+    if (files.length === 0) return null;
+    const file = files[Math.floor(Math.random() * files.length)];
+    const buf = await fs.readFile(path.join(dir, file));
+    const ext = path.extname(file).toLowerCase();
+    const mime =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".webp"
+          ? "image/webp"
+          : "image/png";
+    return `data:${mime};base64,${buf.toString("base64")}`;
+  } catch (err) {
+    console.warn("failed to load bg reference", err);
+    return null;
+  }
+}
 
 /**
  * Templates may bake a semi-transparent wash (an 8-digit #RRGGBBAA hex) into a
@@ -353,6 +404,27 @@ export async function runDesignGeneration(
         selectedPaletteId: paletteOptions[0]?.id ?? null,
       },
     });
+  }
+
+  // Generate a background-style image up-front (image-to-image from one of the
+  // bg-reference designs, recolored to the brand palette) and stash it. It is
+  // NOT set as a slide background — it's emitted into the image bank once the
+  // slides exist (see below), so it's available as an on-brand asset.
+  let bgBankImage: { id: string; url: string; prompt: string } | null = null;
+  if (enforcedPalette) {
+    try {
+      const reference = await loadRandomBgReference();
+      const bgPrompt = buildBackgroundImagePrompt(enforcedPalette);
+      const { dataUrl } = reference
+        ? await generateImageFromReference(bgPrompt, reference, "portrait")
+        : await generateImage(bgPrompt, "portrait");
+      const id = "bg_main";
+      const url = await persistImageUrl(dataUrl, id);
+      bgBankImage = { id, url, prompt: "brand background" };
+      images.set(id, { url, prompt: bgBankImage.prompt });
+    } catch (err) {
+      console.warn("background image generation failed", err);
+    }
   }
 
   // Template remix: customize the cover (text + on-demand images) while
@@ -689,6 +761,20 @@ export async function runDesignGeneration(
     // covers get the headshot inline above.)
     if (authorPhoto && !coverDesign) {
       emit({ type: "element", data: buildAuthorImageElement(), slideIndex: 0 });
+    }
+
+    // Now that every slide exists, drop the brand background image into the
+    // shared image bank (an `image` event fans out to all current slides). It's
+    // available as an on-brand asset without being applied as any background.
+    if (bgBankImage) {
+      emit({
+        type: "image",
+        data: {
+          imageId: bgBankImage.id,
+          url: bgBankImage.url,
+          prompt: bgBankImage.prompt,
+        },
+      });
     }
 
     const assembled = assembleDesignFromEvents([

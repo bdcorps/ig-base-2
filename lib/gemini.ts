@@ -41,6 +41,31 @@ const ASPECT_RATIO: Record<ImageAspect, string> = {
   square: "1:1",
 };
 
+/** Split a data URL into its mime type and raw base64 payload. */
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } {
+  const match = /^data:([^;]+);base64,([\s\S]+)$/.exec(dataUrl);
+  if (!match) throw new Error("Invalid image data URL");
+  return { mimeType: match[1], data: match[2] };
+}
+
+/** Pull the first inline image out of a Gemini image response stream. */
+async function readImageFromStream(
+  response: Awaited<ReturnType<GoogleGenAI["models"]["generateContentStream"]>>,
+): Promise<{ dataUrl: string }> {
+  for await (const chunk of response) {
+    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      const inline = part.inlineData;
+      if (inline?.data) {
+        const mime = inline.mimeType ?? "image/png";
+        return { dataUrl: `data:${mime};base64,${inline.data}` };
+      }
+    }
+  }
+
+  throw new Error("Gemini returned no image data");
+}
+
 export async function generateImage(
   prompt: string,
   aspect: ImageAspect = "portrait",
@@ -64,18 +89,41 @@ export async function generateImage(
     },
   });
 
-  for await (const chunk of response) {
-    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-    for (const part of parts) {
-      const inline = part.inlineData;
-      if (inline?.data) {
-        const mime = inline.mimeType ?? "image/png";
-        return { dataUrl: `data:${mime};base64,${inline.data}` };
-      }
-    }
-  }
+  return readImageFromStream(response);
+}
 
-  throw new Error("Gemini returned no image data");
+/**
+ * Generate an image using a reference image as visual guidance (image-to-image).
+ * The reference is passed to Gemini alongside the text instruction so the model
+ * can mimic its composition/texture/mood while the prompt drives the changes
+ * (e.g. recoloring to a brand palette).
+ */
+export async function generateImageFromReference(
+  prompt: string,
+  referenceDataUrl: string,
+  aspect: ImageAspect = "portrait",
+): Promise<{ dataUrl: string }> {
+  const ai = getClient();
+  const { mimeType, data } = parseDataUrl(referenceDataUrl);
+
+  const response = await ai.models.generateContentStream({
+    model: MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [{ inlineData: { mimeType, data } }, { text: prompt }],
+      },
+    ],
+    config: {
+      imageConfig: {
+        aspectRatio: ASPECT_RATIO[aspect],
+        imageSize: "1K",
+      },
+      responseModalities: [Modality.IMAGE, Modality.TEXT],
+    },
+  });
+
+  return readImageFromStream(response);
 }
 
 const STICKER_CHROMAKEY_PROMPT = `Create a sticker-style illustration on a SOLID CHROMAKEY GREEN background (#00FF00).
