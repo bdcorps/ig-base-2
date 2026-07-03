@@ -10,12 +10,6 @@ export interface AuthorPhoto {
   prompt: string;
 }
 
-/**
- * Resolve the author's headshot from the user's brand kit. Author photos are
- * uploaded to R2 and persisted in the DB via Settings, so we simply reference
- * the stored (dynamic) R2 URL — the first uploaded photo is used on the intro
- * slide of every carousel. Returns null when the user hasn't uploaded one.
- */
 export function loadAuthorPhoto(brandKit?: BrandKit): AuthorPhoto | null {
   const photo = brandKit?.authorPhotos?.[0];
   if (!photo?.url) return null;
