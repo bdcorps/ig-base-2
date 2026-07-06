@@ -1,7 +1,6 @@
 "use client";
 
 import Controls from "@/components/Controls";
-import FeedbackModal from "@/components/FeedbackModal";
 import PostToInstagramModal from "@/components/PostToInstagramModal";
 import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
@@ -11,7 +10,6 @@ import { trackEvent } from "@/lib/analytics";
 import { captureSlidesAsDataUrls, downloadSlidesAsZip } from "@/lib/exportSlides";
 import { DEFAULT_THEME } from "@/lib/fonts";
 import { generationTitle } from "@/lib/generations";
-import { SHAPE_VARIANTS, shapeClipPath, type ShapeVariant } from "@/lib/shapes";
 import type {
   ImageElement,
   PaletteOption,
@@ -22,6 +20,7 @@ import type {
   Theme,
 } from "@/lib/schema";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/schema";
+import { SHAPE_VARIANTS, shapeClipPath, type ShapeVariant } from "@/lib/shapes";
 import type { SlideState } from "@/lib/slideState";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,6 +29,14 @@ interface Props {
   id: string;
 }
 
+type LayerOrderAction = "front" | "back" | "forward" | "backward";
+
+type LayerOrderMenuState = {
+  selection: ElementSelection;
+  x: number;
+  y: number;
+};
+
 export default function DesignWorkspace({ id }: Props) {
   const { generation, updateGeneration, hydrated } = useGeneration(id);
   const [selection, setSelection] = useState<ElementSelection | null>(null);
@@ -37,9 +44,8 @@ export default function DesignWorkspace({ id }: Props) {
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [layerOrderMenu, setLayerOrderMenu] = useState<LayerOrderMenuState | null>(null);
   const [postOpen, setPostOpen] = useState(false);
-  const feedbackShownRef = useRef(false);
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const restoreSlides = useCallback(
@@ -49,7 +55,7 @@ export default function DesignWorkspace({ id }: Props) {
     [id, updateGeneration],
   );
 
-  const { pushHistory, undo, redo, canUndo, canRedo } = useSlideEditHistory(
+  const { pushHistory, undo, redo } = useSlideEditHistory(
     generation?.slides ?? [],
     restoreSlides,
     generation ? `${id}:${generation.activeSlideIndex}` : id,
@@ -131,7 +137,9 @@ export default function DesignWorkspace({ id }: Props) {
 
       if (e.key === "Escape") {
         if (inField) return;
-        if (selection?.childIndex != null) {
+        if (layerOrderMenu) {
+          setLayerOrderMenu(null);
+        } else if (selection?.childIndex != null) {
           setSelection({ elementIndex: selection.elementIndex });
         } else if (stackEditIndex != null) {
           setStackEditIndex(null);
@@ -163,48 +171,35 @@ export default function DesignWorkspace({ id }: Props) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selection, stackEditIndex, deleteSelection, undo, redo]);
+  }, [selection, stackEditIndex, layerOrderMenu, deleteSelection, undo, redo]);
 
   useEffect(() => {
     if (selection == null) return;
 
     function onPointerDown(e: PointerEvent) {
       const target = e.target as HTMLElement | null;
-      if (target?.closest("[data-active-canvas]") || target?.closest("[data-inspector]")) {
+      if (
+        target?.closest("[data-active-canvas]") ||
+        target?.closest("[data-inspector]") ||
+        target?.closest("[data-layer-order-menu]")
+      ) {
         return;
       }
       setSelection(null);
       setStackEditIndex(null);
+      setLayerOrderMenu(null);
     }
 
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [selection]);
 
-  useEffect(() => {
-    if (
-      generation?.status !== "complete" ||
-      !generation.promptId ||
-      generation.slides.length === 0 ||
-      feedbackShownRef.current
-    ) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      feedbackShownRef.current = true;
-      setFeedbackOpen(true);
-    }, 5000);
-
-    return () => window.clearTimeout(timer);
-  }, [generation?.status, generation?.promptId, generation?.slides.length]);
-
   // Re-open the post modal after returning from the Instagram OAuth round-trip
   // (start route redirects back to /design/[id]?post=1&ig=...), then clean the URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("post") === "1") {
-      setPostOpen(true);
+      const timer = window.setTimeout(() => setPostOpen(true), 0);
       params.delete("post");
       params.delete("ig");
       const query = params.toString();
@@ -213,33 +208,17 @@ export default function DesignWorkspace({ id }: Props) {
         "",
         `${window.location.pathname}${query ? `?${query}` : ""}`,
       );
+      return () => window.clearTimeout(timer);
     }
   }, []);
 
-  const submitFeedback = useCallback(
-    async (rating: number, comment: string) => {
-      if (!generation?.promptId) return;
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          promptId: generation.promptId,
-          rating,
-          comment: comment.trim() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        throw new Error("Failed to save feedback");
-      }
-      trackEvent("submit_feedback", {
-        generation_id: id,
-        prompt_id: generation.promptId,
-        rating,
-        has_comment: comment.trim().length > 0,
-      });
-    },
-    [generation?.promptId, id],
-  );
+  const captureSlideImages = useCallback(async () => {
+    await document.fonts.ready;
+    const roots = exportRefs.current
+      .map((el) => el?.querySelector("[data-slide-export]") as HTMLElement | null)
+      .filter(Boolean) as HTMLElement[];
+    return captureSlidesAsDataUrls(roots);
+  }, []);
 
   if (!generation) {
     if (!hydrated) {
@@ -267,6 +246,7 @@ export default function DesignWorkspace({ id }: Props) {
     updateGeneration(id, { activeSlideIndex: index });
     setSelection(null);
     setStackEditIndex(null);
+    setLayerOrderMenu(null);
   }
 
   function updateTheme(theme: Theme) {
@@ -309,6 +289,46 @@ export default function DesignWorkspace({ id }: Props) {
           },
       ),
     });
+  }
+
+  function reorderElementLayer(action: LayerOrderAction) {
+    if (!activeSlide || !layerOrderMenu) return;
+    const elements = activeSlide.design.elements;
+    const from = layerOrderMenu.selection.elementIndex;
+    const last = elements.length - 1;
+    if (from < 0 || from > last) {
+      setLayerOrderMenu(null);
+      return;
+    }
+
+    const to =
+      action === "front"
+        ? last
+        : action === "back"
+          ? 0
+          : action === "forward"
+            ? Math.min(last, from + 1)
+            : Math.max(0, from - 1);
+
+    if (to === from) {
+      setLayerOrderMenu(null);
+      return;
+    }
+
+    const nextElements = [...elements];
+    const [moved] = nextElements.splice(from, 1);
+    nextElements.splice(to, 0, moved);
+
+    pushHistory();
+    const slideIdx = gen.activeSlideIndex;
+    updateGeneration(id, {
+      slides: gen.slides.map((s, i) =>
+        i !== slideIdx ? s : { ...s, design: { ...s.design, elements: nextElements } },
+      ),
+    });
+    setSelection({ elementIndex: to });
+    setStackEditIndex(null);
+    setLayerOrderMenu(null);
   }
 
   function updateStackChild(
@@ -377,14 +397,6 @@ export default function DesignWorkspace({ id }: Props) {
     setMenuOpen(false);
   }
 
-  const captureSlideImages = useCallback(async () => {
-    await document.fonts.ready;
-    const roots = exportRefs.current
-      .map((el) => el?.querySelector("[data-slide-export]") as HTMLElement | null)
-      .filter(Boolean) as HTMLElement[];
-    return captureSlidesAsDataUrls(roots);
-  }, []);
-
   async function downloadZip() {
     if (gen.slides.length === 0) return;
     setExporting(true);
@@ -426,6 +438,7 @@ export default function DesignWorkspace({ id }: Props) {
       imageId,
       fit: "cover",
       borderRadius: 0,
+      opacity: 1,
     };
 
     pushHistory();
@@ -527,6 +540,7 @@ export default function DesignWorkspace({ id }: Props) {
       imageId: shape.imageId,
       fit: shape.fit ?? "cover",
       borderRadius: 0,
+      opacity: 1,
     };
     const nextElements: SlideElement[] = [
       ...els.map((el, i) =>
@@ -591,10 +605,6 @@ export default function DesignWorkspace({ id }: Props) {
             <h1 className="truncate text-[14px] font-medium text-text-base">
               {generationTitle(gen.prompt)}
             </h1>
-            <span className="hidden shrink-0 items-center gap-1.5 text-[13px] text-text-tertiary sm:flex">
-              <FolderIcon className="h-3.5 w-3.5" />
-              carousel-studio/design
-            </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeSlide && (
@@ -646,7 +656,7 @@ export default function DesignWorkspace({ id }: Props) {
                 <button
                   type="button"
                   onClick={() => setPostOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg bg-linear-to-r from-pink-500 via-red-500 to-yellow-500 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm transition-opacity hover:opacity-95"
+                  className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
                 >
                   <InstagramGlyph className="h-4 w-4" />
                   Post to IG
@@ -715,6 +725,19 @@ export default function DesignWorkspace({ id }: Props) {
                         onEnterStackEdit={isActive ? enterStackEdit : undefined}
                         onElementChange={isActive ? updateElement : undefined}
                         onStackChildChange={isActive ? updateStackChild : undefined}
+                        onElementContextMenu={
+                          isActive
+                            ? (nextSelection, position) => {
+                              setSelection(nextSelection);
+                              setStackEditIndex(null);
+                              setLayerOrderMenu({
+                                selection: nextSelection,
+                                x: position.x,
+                                y: position.y,
+                              });
+                            }
+                            : undefined
+                        }
                         onEditBegin={isActive ? pushHistory : undefined}
                         onImageDropOnShape={isActive ? maskImageIntoShape : undefined}
                       />
@@ -807,12 +830,6 @@ export default function DesignWorkspace({ id }: Props) {
         </div>
       )}
 
-      <FeedbackModal
-        open={feedbackOpen}
-        onClose={() => setFeedbackOpen(false)}
-        onSubmit={submitFeedback}
-      />
-
       <PostToInstagramModal
         open={postOpen}
         onClose={() => setPostOpen(false)}
@@ -821,7 +838,72 @@ export default function DesignWorkspace({ id }: Props) {
         captureSlideImages={captureSlideImages}
         returnTo={`/design/${id}?post=1`}
       />
+
+      {layerOrderMenu && activeSlide && (() => {
+        const elementCount = activeSlide.design.elements.length;
+        const elementIndex = layerOrderMenu.selection.elementIndex;
+        const isBack = elementIndex <= 0;
+        const isFront = elementIndex >= elementCount - 1;
+        return (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 cursor-default"
+              aria-label="Close layer ordering menu"
+              onClick={() => setLayerOrderMenu(null)}
+            />
+            <div
+              data-layer-order-menu=""
+              className="fixed z-50 min-w-[160px] rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+              style={{ left: layerOrderMenu.x, top: layerOrderMenu.y }}
+            >
+              <LayerOrderMenuButton
+                label="Bring to front"
+                disabled={isFront}
+                onClick={() => reorderElementLayer("front")}
+              />
+              <LayerOrderMenuButton
+                label="Bring to back"
+                disabled={isBack}
+                onClick={() => reorderElementLayer("back")}
+              />
+              <div className="my-1 h-px bg-neutral-100" />
+              <LayerOrderMenuButton
+                label="Move forward"
+                disabled={isFront}
+                onClick={() => reorderElementLayer("forward")}
+              />
+              <LayerOrderMenuButton
+                label="Move backward"
+                disabled={isBack}
+                onClick={() => reorderElementLayer("backward")}
+              />
+            </div>
+          </>
+        );
+      })()}
     </>
+  );
+}
+
+function LayerOrderMenuButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="block w-full px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-text-tertiary disabled:opacity-50"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -891,8 +973,10 @@ function ElementInspector({
             imageId={element.imageId}
             fit={element.fit}
             borderRadius={element.borderRadius}
+            opacity={element.opacity ?? 1}
             onFitChange={(fit) => onChange({ fit } as Partial<SlideElement>)}
             onBorderRadiusChange={(borderRadius) => onChange({ borderRadius } as Partial<SlideElement>)}
+            onOpacityChange={(opacity) => onChange({ opacity } as Partial<SlideElement>)}
             onImageChange={onImageChange}
           />
         )}
@@ -1018,15 +1102,19 @@ function ImageInspectorFields({
   imageId,
   fit,
   borderRadius,
+  opacity,
   onFitChange,
   onBorderRadiusChange,
+  onOpacityChange,
   onImageChange,
 }: {
   imageId: string;
   fit: "cover" | "contain";
   borderRadius: number;
+  opacity: number;
   onFitChange: (fit: "cover" | "contain") => void;
   onBorderRadiusChange: (borderRadius: number) => void;
+  onOpacityChange: (opacity: number) => void;
   onImageChange: (imageId: string, patch: { url: string; prompt?: string }) => void;
 }) {
   return (
@@ -1048,6 +1136,24 @@ function ImageInspectorFields({
           value={Math.round(borderRadius)}
           onChange={(e) => onBorderRadiusChange(Number(e.target.value))}
           className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] text-text-base transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20"
+        />
+      </div>
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[12px] text-secondary">Opacity</p>
+          <span className="text-[12px] font-medium text-text-tertiary">
+            {Math.round((opacity ?? 1) * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={Math.round((opacity ?? 1) * 100)}
+          onChange={(e) => onOpacityChange(Number(e.target.value) / 100)}
+          className="w-full accent-neutral-900"
+          aria-label="Image opacity"
         />
       </div>
     </>
@@ -1189,8 +1295,10 @@ function StackChildInspector({
             imageId={child.imageId}
             fit={child.fit}
             borderRadius={child.borderRadius}
+            opacity={child.opacity ?? 1}
             onFitChange={(fit) => onChange({ fit } as Partial<StackChild>)}
             onBorderRadiusChange={(borderRadius) => onChange({ borderRadius } as Partial<StackChild>)}
+            onOpacityChange={(opacity) => onChange({ opacity } as Partial<StackChild>)}
             onImageChange={onImageChange}
           />
         )}

@@ -40,6 +40,10 @@ interface Props {
   onEnterStackEdit?: (elementIndex: number) => void;
   onElementChange?: (index: number, patch: Partial<SlideElement>) => void;
   onStackChildChange?: (stackIndex: number, childIndex: number, patch: Partial<StackChild>) => void;
+  onElementContextMenu?: (
+    selection: ElementSelection,
+    position: { x: number; y: number },
+  ) => void;
   /** Called once when a drag/resize gesture begins (for undo history). */
   onEditBegin?: () => void;
   /**
@@ -66,6 +70,7 @@ export default function SlideRenderer({
   onEnterStackEdit,
   onElementChange,
   onStackChildChange,
+  onElementContextMenu,
   onEditBegin,
   onImageDropOnShape,
 }: Props) {
@@ -121,6 +126,7 @@ export default function SlideRenderer({
             onEnterStackEdit={onEnterStackEdit}
             onChange={onElementChange}
             onStackChildChange={onStackChildChange}
+            onElementContextMenu={onElementContextMenu}
             onEditBegin={onEditBegin}
             onSnapGuidesChange={setSnapGuides}
             onDragOverShape={onImageDropOnShape ? setDropTargetIndex : undefined}
@@ -341,6 +347,7 @@ function ElementView({
   onEnterStackEdit,
   onChange,
   onStackChildChange,
+  onElementContextMenu,
   onEditBegin,
   onSnapGuidesChange,
   onDragOverShape,
@@ -360,6 +367,10 @@ function ElementView({
   onEnterStackEdit?: (elementIndex: number) => void;
   onChange?: (index: number, patch: Partial<SlideElement>) => void;
   onStackChildChange?: (stackIndex: number, childIndex: number, patch: Partial<StackChild>) => void;
+  onElementContextMenu?: (
+    selection: ElementSelection,
+    position: { x: number; y: number },
+  ) => void;
   onEditBegin?: () => void;
   onSnapGuidesChange?: (guides: SnapGuides | null) => void;
   onDragOverShape?: (shapeIndex: number | null) => void;
@@ -446,6 +457,17 @@ function ElementView({
   };
 
   const onPointerDown = (e: React.PointerEvent) => beginDrag("move", e);
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    if (!editable) return;
+    e.preventDefault();
+    e.stopPropagation();
+    pendingDrag.current = null;
+    drag.current = null;
+    setDragging(false);
+    onSelect?.({ elementIndex: index });
+    onElementContextMenu?.({ elementIndex: index }, { x: e.clientX, y: e.clientY });
+  };
 
   const onPointerMoveWithPending = (e: React.PointerEvent) => {
     if (pendingDrag.current && !drag.current) {
@@ -589,6 +611,7 @@ function ElementView({
     editable && !stackEditing
       ? {
           ...hoverHandlers,
+          onContextMenu,
           onPointerDown,
           onPointerMove: onPointerMoveWithPending,
           onPointerUp: onPointerUpWithPending,
@@ -601,6 +624,7 @@ function ElementView({
               e.stopPropagation();
               onSelect?.({ elementIndex: index });
             },
+            onContextMenu,
           }
         : {};
 
@@ -753,6 +777,7 @@ function ElementView({
             width: "100%",
             height: "100%",
             borderRadius: element.borderRadius,
+            opacity: element.opacity ?? 1,
             overflow: "hidden",
           }}
         >
@@ -1032,6 +1057,7 @@ function StackChildView({
             width: "100%",
             height: "100%",
             borderRadius: child.borderRadius,
+            opacity: child.opacity ?? 1,
             overflow: "hidden",
           }}
         >

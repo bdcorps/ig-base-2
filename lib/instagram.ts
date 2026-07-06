@@ -41,7 +41,7 @@ export function isInstagramConfigured(): boolean {
 
 export function instagramRedirectUri(): string {
   if (process.env.INSTAGRAM_REDIRECT_URI) return process.env.INSTAGRAM_REDIRECT_URI;
-  const base = (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const base = process.env.BETTER_AUTH_URL;
   return `${base}/api/instagram/oauth/callback`;
 }
 

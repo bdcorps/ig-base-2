@@ -128,7 +128,7 @@ export default function PromptBox({
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <div className="overflow-hidden rounded-xl border border-neutral-200/90 bg-white">
+      <div className="overflow-hidden rounded-xl border border-neutral-200/90 bg-white shadow-lg">
         <textarea
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}

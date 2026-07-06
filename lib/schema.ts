@@ -96,6 +96,7 @@ export const ImageElementSchema = z.object({
   imageId: z.string().describe("Id returned by generateImage or generateSticker."),
   fit: z.enum(["cover", "contain"]).default("cover"),
   borderRadius: z.number().default(0),
+  opacity: z.number().min(0).max(1).default(1).describe("Image opacity 0-1."),
 });
 
 export const ShapeElementSchema = z.object({

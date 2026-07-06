@@ -106,6 +106,7 @@ function slide1(): SlideState {
         imageId: "hero",
         fit: "contain",
         borderRadius: 0,
+        opacity: 1,
       },
       {
         kind: "text",

@@ -69,17 +69,13 @@ export default function Home() {
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-72"
-      />
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-8 py-12">
-        <div className="mb-8 text-center">
-          <h1 className="text-[22px] font-normal text-gray-700">
+    <div className="relative overflow-y-auto">
+      <div className="relative z-10 items-center justify-center px-8 py-8 flex flex-col min-h-[55vh]">
+        <div className="mb-8 text-center max-w-xl mx-auto">
+          <h1 className="text-3xl font-semibold text-gray-900 leading-normal">
             Make viral carousels for your IG feed with Carousel Studio (Beta)
           </h1>
-          <p className="text-[13px] text-gray-500">Go to Claude, get a prompt for a carousel, paste it in and watch the magic happen.</p>
+          {/* <p className="text-[13px] text-gray-500">Go to Claude, get a prompt for a carousel, paste it in and watch the magic happen.</p> */}
         </div>
         <PromptBox
           prompt={prompt}
@@ -97,18 +93,18 @@ export default function Home() {
         >
           See demo
         </button>
-        {generations.length > 0 && (
-          <div className="mt-12 grid w-full max-w-5xl grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-            {generations.map((gen) => (
-              <GenerationPreviewCard
-                key={gen.id}
-                generation={gen}
-                onOpen={() => router.push(`/design/${gen.id}`)}
-              />
-            ))}
-          </div>
-        )}
       </div>
+
+      <div className="mt-12 grid w-full max-w-5xl grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 mx-auto px-6">
+        {generations.map((gen) => (
+          <GenerationPreviewCard
+            key={gen.id}
+            generation={gen}
+            onOpen={() => router.push(`/design/${gen.id}`)}
+          />
+        ))}
+      </div>
+
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} callbackURL="/" />
     </div>
   );

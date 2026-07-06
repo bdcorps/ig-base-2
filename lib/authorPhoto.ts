@@ -36,6 +36,7 @@ export function buildAuthorImageElement(): ImageElement {
     imageId: AUTHOR_IMAGE_ID,
     fit: "contain",
     borderRadius: 0,
+    opacity: 1,
   };
 }
 

@@ -219,6 +219,7 @@ function img(o: {
     imageId: o.imageId,
     fit: o.fit ?? "cover",
     borderRadius: o.borderRadius ?? 0,
+    opacity: 1,
   };
 }
 
