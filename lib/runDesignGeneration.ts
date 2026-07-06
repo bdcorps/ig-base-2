@@ -38,7 +38,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { z } from "zod";
 
-const MODEL = process.env.DESIGN_MODEL ?? "anthropic/claude-sonnet-5";
+const MODEL = "anthropic/claude-sonnet-5";
 
 const STYLE_REFERENCE_IMAGE_URL =
   "https://i.ibb.co/zTsXjPG1/Clean-Shot-2026-06-20-at-20-50-57.png";
