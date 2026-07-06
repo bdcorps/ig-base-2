@@ -32,21 +32,16 @@ import {
 } from "@/lib/schema";
 import { remixTemplateCover } from "@/lib/templateRemix";
 import { buildCover, findTemplate } from "@/lib/templates";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
 import { promises as fs } from "fs";
 import path from "path";
 import { z } from "zod";
 
-const MODEL = process.env.DESIGN_MODEL ?? "gemini-2.5-flash";
+const MODEL = process.env.DESIGN_MODEL ?? "anthropic/claude-sonnet-5";
 
 const STYLE_REFERENCE_IMAGE_URL =
   "https://i.ibb.co/zTsXjPG1/Clean-Shot-2026-06-20-at-20-50-57.png";
-
-const gemini = createGoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
 
 /**
  * Build the image-to-image instruction for the carousel's background asset.
@@ -483,15 +478,8 @@ export async function runDesignGeneration(
 
   try {
     await generateText({
-      model: gemini(MODEL),
+      model: MODEL,
       maxOutputTokens: 10000,
-      providerOptions: {
-        google: {
-          thinkingConfig: MODEL.includes("pro")
-            ? { thinkingBudget: 128 }
-            : { thinkingBudget: 0 },
-        },
-      },
       system: SYSTEM_PROMPT,
       messages: [
         ...FEW_SHOT_MESSAGES,

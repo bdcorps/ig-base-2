@@ -98,7 +98,7 @@ function KanbanCard({
       }`}
     >
       <div className="p-3">
-        <button type="button" onClick={onSelect} className="w-full text-left">
+        <button type="button" onClick={onSelect} className="w-full cursor-pointer text-left">
           <div className="mb-2 flex items-start justify-between gap-2">
             <StatusBadge running={isRunning} failed={isFailed} ready={isReady} />
             {isRunning && (
@@ -122,7 +122,7 @@ function KanbanCard({
             <button
               type="button"
               onClick={onOpenEditor}
-              className="group relative rounded-md outline-none ring-neutral-900/20 focus-visible:ring-2"
+              className="group relative cursor-pointer rounded-md outline-none ring-neutral-900/20 focus-visible:ring-2"
               title="Open in editor"
             >
               <SlideRenderer
@@ -130,7 +130,7 @@ function KanbanCard({
                 theme={job.theme}
                 displayWidth={200}
               />
-              <span className="pointer-events-none absolute inset-0 flex items-end justify-center rounded-md bg-gradient-to-t from-black/60 to-transparent pb-2 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="pointer-events-none absolute inset-0 flex items-end justify-center rounded-md bg-linear-to-t from-black/60 to-transparent pb-2 opacity-0 transition-opacity group-hover:opacity-100">
                 <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-neutral-900">
                   Open in editor
                 </span>
@@ -165,7 +165,7 @@ function KanbanCard({
             <button
               type="button"
               onClick={onRetry}
-              className="text-xs text-neutral-600 hover:text-neutral-900"
+              className="cursor-pointer text-xs text-neutral-600 hover:text-neutral-900"
             >
               Retry
             </button>
@@ -173,7 +173,7 @@ function KanbanCard({
           <button
             type="button"
             onClick={onRemove}
-            className="text-xs text-neutral-500 hover:text-red-600"
+            className="cursor-pointer text-xs text-neutral-500 hover:text-red-600"
           >
             Remove
           </button>

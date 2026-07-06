@@ -75,7 +75,7 @@ export default function LeaderboardScreen() {
                 key={b.id}
                 type="button"
                 onClick={() => setActiveId(b.id)}
-                className={`-mb-px border-b-2 px-0.5 pb-3 text-[14px] font-medium transition-colors ${active
+                className={`-mb-px cursor-pointer border-b-2 px-0.5 pb-3 text-[14px] font-medium transition-colors ${active
                     ? "border-neutral-900 text-neutral-900"
                     : "border-transparent text-neutral-400 hover:text-neutral-700"
                   }`}

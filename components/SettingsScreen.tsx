@@ -215,7 +215,7 @@ export default function SettingsScreen() {
               type="button"
               onClick={handleSave}
               disabled={saving || loading}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="cursor-pointer rounded-lg bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
@@ -283,7 +283,7 @@ export default function SettingsScreen() {
                   <button
                     type="button"
                     onClick={addColor}
-                    className="text-[12px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+                    className="cursor-pointer text-[12px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
                   >
                     + Add color
                   </button>
@@ -322,7 +322,7 @@ export default function SettingsScreen() {
                         <button
                           type="button"
                           onClick={() => setMainColor(color.id)}
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${color.isMain
+                          className={`cursor-pointer rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${color.isMain
                             ? "bg-neutral-900 text-white"
                             : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
                             }`}
@@ -332,7 +332,7 @@ export default function SettingsScreen() {
                         <button
                           type="button"
                           onClick={() => removeColor(color.id)}
-                          className="text-[10px] text-neutral-400 transition-colors hover:text-red-500"
+                          className="cursor-pointer text-[10px] text-neutral-400 transition-colors hover:text-red-500"
                         >
                           Remove
                         </button>
@@ -423,7 +423,7 @@ export default function SettingsScreen() {
                       <button
                         type="button"
                         onClick={() => removePhoto(photo.id)}
-                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
                         aria-label="Remove photo"
                       >
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -437,7 +437,7 @@ export default function SettingsScreen() {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
-                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-neutral-400 transition-colors hover:border-neutral-400 hover:text-neutral-600 disabled:opacity-50"
+                      className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-neutral-400 transition-colors hover:border-neutral-400 hover:text-neutral-600 disabled:opacity-50"
                     >
                       {uploading ? (
                         <span className="text-[12px]">Uploading…</span>
@@ -550,7 +550,7 @@ function InstagramSettingsSection({ returnTo }: { returnTo: string }) {
             <button
               type="button"
               onClick={disconnect}
-              className="ml-auto rounded-lg border border-neutral-200 px-3 py-1.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
+              className="ml-auto cursor-pointer rounded-lg border border-neutral-200 px-3 py-1.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
             >
               Disconnect
             </button>
@@ -566,7 +566,7 @@ function InstagramSettingsSection({ returnTo }: { returnTo: string }) {
               type="button"
               onClick={connect}
               disabled={Boolean(status && !status.configured)}
-              className="shrink-0 rounded-lg bg-linear-to-r from-purple-600 via-pink-500 to-orange-500 px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 cursor-pointer rounded-lg bg-linear-to-r from-purple-600 via-pink-500 to-orange-500 px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Connect Instagram
             </button>

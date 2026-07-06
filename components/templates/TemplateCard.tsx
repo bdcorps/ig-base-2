@@ -17,7 +17,7 @@ export default function TemplateCard({ template, onSelect, width = 200 }: Templa
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className="group shrink-0 text-left"
+      className="group shrink-0 cursor-pointer text-left"
       style={{ width }}
     >
       <div className="relative overflow-hidden rounded-2xl ring-1 ring-black/5 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg">

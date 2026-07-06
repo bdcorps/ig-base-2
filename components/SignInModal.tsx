@@ -43,7 +43,7 @@ export default function SignInModal({ open, onClose, callbackURL = "/" }: Props)
           type="button"
           onClick={handleGoogle}
           disabled={loading}
-          className="flex w-full items-center justify-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-[14px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-60"
+          className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-[14px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-60"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
             <path

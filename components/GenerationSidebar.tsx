@@ -102,7 +102,7 @@ export default function GenerationSidebar({ generations }: Props) {
         )}
       </div>
 
-      <div className="px-2">
+      {/* <div className="px-2">
         <Link
           href="/leaderboard"
           className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
@@ -126,16 +126,15 @@ export default function GenerationSidebar({ generations }: Props) {
           </svg>
           Leaderboard
         </Link>
-      </div>
+      </div> */}
 
       <div className="px-2 pb-1">
         <Link
           href="/settings"
-          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
-            pathname === "/settings"
+          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${pathname === "/settings"
               ? "bg-neutral-100 text-neutral-900"
               : "text-neutral-700 hover:bg-neutral-50"
-          }`}
+            }`}
         >
           <svg
             className="h-4 w-4 text-neutral-500"
@@ -182,7 +181,7 @@ export default function GenerationSidebar({ generations }: Props) {
             <button
               type="button"
               onClick={() => signOut()}
-              className="shrink-0 rounded-md px-2 py-1 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800"
+              className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800"
             >
               Sign out
             </button>
@@ -191,7 +190,7 @@ export default function GenerationSidebar({ generations }: Props) {
           <button
             type="button"
             onClick={() => setSignInOpen(true)}
-            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="w-full cursor-pointer rounded-lg border border-neutral-200 px-3 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
           >
             Sign in
           </button>

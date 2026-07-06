@@ -12,8 +12,13 @@ const PENDING_GENERATION_KEY = "pendingGeneration";
 
 export default function Home() {
   const router = useRouter();
-  const { generations, startGeneration, importFromEditorSession, loadSampleDesign } =
-    useGenerations();
+  const {
+    generations,
+    deleteGeneration,
+    startGeneration,
+    importFromEditorSession,
+    loadSampleDesign,
+  } = useGenerations();
   const { data: session, isPending: sessionPending } = useSession();
   const [prompt, setPrompt] = useState(EXAMPLE_PROMPTS[0]);
   const [slideCount, setSlideCount] = useState(5);
@@ -89,7 +94,7 @@ export default function Home() {
         <button
           type="button"
           onClick={handleOpenSample}
-          className="mt-6 text-[13px] text-neutral-400 transition-colors hover:text-neutral-600"
+          className="mt-6 cursor-pointer text-[13px] text-neutral-400 transition-colors hover:text-neutral-600"
         >
           See demo
         </button>
@@ -101,6 +106,7 @@ export default function Home() {
             key={gen.id}
             generation={gen}
             onOpen={() => router.push(`/design/${gen.id}`)}
+            onDelete={() => deleteGeneration(gen.id)}
           />
         ))}
       </div>

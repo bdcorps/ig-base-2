@@ -254,7 +254,7 @@ export default function PostToInstagramModal({
                 <button
                   type="button"
                   onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                  className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-neutral-800 shadow transition hover:bg-white"
+                  className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/85 text-neutral-800 shadow transition hover:bg-white"
                   aria-label="Previous slide"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -264,7 +264,7 @@ export default function PostToInstagramModal({
                 <button
                   type="button"
                   onClick={() => setIndex((i) => Math.min(slides.length - 1, i + 1))}
-                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-neutral-800 shadow transition hover:bg-white"
+                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/85 text-neutral-800 shadow transition hover:bg-white"
                   aria-label="Next slide"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -313,7 +313,7 @@ export default function PostToInstagramModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+              className="cursor-pointer rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -339,7 +339,7 @@ export default function PostToInstagramModal({
                   type="button"
                   onClick={generateCaption}
                   disabled={captionLoading}
-                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50"
                 >
                   {captionLoading ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -386,7 +386,7 @@ export default function PostToInstagramModal({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex-1 rounded-lg bg-neutral-900 px-3 py-2 text-[13px] font-medium text-white transition hover:bg-neutral-800"
+                    className="flex-1 cursor-pointer rounded-lg bg-neutral-900 px-3 py-2 text-[13px] font-medium text-white transition hover:bg-neutral-800"
                   >
                     Done
                   </button>
@@ -401,7 +401,7 @@ export default function PostToInstagramModal({
                   type="button"
                   onClick={handlePublish}
                   disabled={!status?.connected || busy || slides.length === 0}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-pink-500 via-red-500 to-yellow-500 px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-linear-to-r from-pink-500 via-red-500 to-yellow-500 px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                   {publishLabel}
@@ -457,7 +457,7 @@ function ConnectionCard({
         <button
           type="button"
           onClick={onSignIn}
-          className="flex items-center justify-center gap-2.5 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-[13px] font-medium text-neutral-800 transition hover:bg-neutral-50"
+          className="flex cursor-pointer items-center justify-center gap-2.5 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-[13px] font-medium text-neutral-800 transition hover:bg-neutral-50"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z" />
@@ -495,7 +495,7 @@ function ConnectionCard({
         <button
           type="button"
           onClick={onDisconnect}
-          className="ml-auto rounded-md px-2 py-1 text-[12px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+          className="ml-auto cursor-pointer rounded-md px-2 py-1 text-[12px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
         >
           Disconnect
         </button>
@@ -519,7 +519,7 @@ function ConnectionCard({
         type="button"
         onClick={onConnect}
         disabled={notConfigured}
-        className="flex items-center justify-center gap-2 rounded-lg bg-linear-to-r from-purple-600 via-pink-500 to-orange-500 px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-linear-to-r from-purple-600 via-pink-500 to-orange-500 px-4 py-2 text-[13px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
           <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16m0 1.62c-3.15 0-3.52.01-4.76.07-.9.04-1.39.19-1.71.32-.43.17-.74.37-1.06.69-.32.32-.52.63-.69 1.06-.13.32-.28.81-.32 1.71-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.04.9.19 1.39.32 1.71.17.43.37.74.69 1.06.32.32.63.52 1.06.69.32.13.81.28 1.71.32 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c.9-.04 1.39-.19 1.71-.32.43-.17.74-.37 1.06-.69.32-.32.52-.63.69-1.06.13-.32.28-.81.32-1.71.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.04-.9-.19-1.39-.32-1.71a2.85 2.85 0 0 0-.69-1.06 2.85 2.85 0 0 0-1.06-.69c-.32-.13-.81-.28-1.71-.32-1.24-.06-1.61-.07-4.76-.07m0 2.76a5.46 5.46 0 1 1 0 10.92 5.46 5.46 0 0 1 0-10.92m0 1.62a3.84 3.84 0 1 0 0 7.68 3.84 3.84 0 0 0 0-7.68m5.65-2.9a1.28 1.28 0 1 1 0 2.56 1.28 1.28 0 0 1 0-2.56" />

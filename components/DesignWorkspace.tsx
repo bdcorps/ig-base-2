@@ -612,7 +612,7 @@ export default function DesignWorkspace({ id }: Props) {
                 <button
                   type="button"
                   onClick={() => setShapeMenuOpen((v) => !v)}
-                  className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
                   aria-expanded={shapeMenuOpen}
                 >
                   <ShapePlusIcon className="h-4 w-4" />
@@ -622,7 +622,7 @@ export default function DesignWorkspace({ id }: Props) {
                   <>
                     <button
                       type="button"
-                      className="fixed inset-0 z-10 cursor-default"
+                      className="fixed inset-0 z-10 cursor-pointer"
                       aria-label="Close menu"
                       onClick={() => setShapeMenuOpen(false)}
                     />
@@ -632,7 +632,7 @@ export default function DesignWorkspace({ id }: Props) {
                           key={v.id}
                           type="button"
                           onClick={() => addShape(v.id)}
-                          className="flex flex-col items-center gap-1.5 rounded-md px-2 py-2 text-[12px] text-primary hover:bg-neutral-50"
+                          className="flex cursor-pointer flex-col items-center gap-1.5 rounded-md px-2 py-2 text-[12px] text-primary hover:bg-neutral-50"
                         >
                           <ShapeGlyph variant={v.id} className="h-6 w-6 text-secondary" />
                           {v.label}
@@ -649,14 +649,14 @@ export default function DesignWorkspace({ id }: Props) {
                   type="button"
                   onClick={downloadZip}
                   disabled={exporting}
-                  className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                  className="cursor-pointer rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
                 >
                   {exporting ? "Exporting…" : "Export"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPostOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
                 >
                   <InstagramGlyph className="h-4 w-4" />
                   Post to IG
@@ -667,7 +667,7 @@ export default function DesignWorkspace({ id }: Props) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
+                className="cursor-pointer rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
                 aria-label="More actions"
                 aria-expanded={menuOpen}
               >
@@ -677,7 +677,7 @@ export default function DesignWorkspace({ id }: Props) {
                 <>
                   <button
                     type="button"
-                    className="fixed inset-0 z-10 cursor-default"
+                    className="fixed inset-0 z-10 cursor-pointer"
                     aria-label="Close menu"
                     onClick={() => setMenuOpen(false)}
                   />
@@ -686,7 +686,7 @@ export default function DesignWorkspace({ id }: Props) {
                       type="button"
                       onClick={copyJson}
                       disabled={!activeSlide}
-                      className="block w-full px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Copy JSON
                     </button>
@@ -848,7 +848,7 @@ export default function DesignWorkspace({ id }: Props) {
           <>
             <button
               type="button"
-              className="fixed inset-0 z-40 cursor-default"
+              className="fixed inset-0 z-40 cursor-pointer"
               aria-label="Close layer ordering menu"
               onClick={() => setLayerOrderMenu(null)}
             />
@@ -900,7 +900,7 @@ function LayerOrderMenuButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="block w-full px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-text-tertiary disabled:opacity-50"
+      className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-text-tertiary disabled:opacity-50"
     >
       {label}
     </button>
@@ -1206,7 +1206,7 @@ function ShapeInspectorFields({
           <button
             type="button"
             onClick={onSeparateImage}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
           >
             <SeparateIcon className="h-4 w-4" />
             Separate image

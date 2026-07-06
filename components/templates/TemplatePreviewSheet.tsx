@@ -140,7 +140,7 @@ export default function TemplatePreviewSheet({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 cursor-pointer bg-black/50 backdrop-blur-sm"
       />
 
       <div className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white">
@@ -152,7 +152,7 @@ export default function TemplatePreviewSheet({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
           >
             <CloseIcon />
           </button>
@@ -237,7 +237,7 @@ export default function TemplatePreviewSheet({
                     <button
                       type="button"
                       onClick={() => removePhoto(photo.id)}
-                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      className="absolute -right-2 -top-2 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
                       aria-label={`Remove ${photo.name}`}
                     >
                       ×
@@ -256,7 +256,7 @@ export default function TemplatePreviewSheet({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-neutral-200 px-5 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                className="cursor-pointer rounded-xl border border-neutral-200 px-5 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
               >
                 Cancel
               </button>
@@ -264,7 +264,7 @@ export default function TemplatePreviewSheet({
                 type="button"
                 onClick={seeTemplate}
                 disabled={loading}
-                className="rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                className="cursor-pointer rounded-xl border border-neutral-300 px-5 py-3 text-sm font-semibold text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-50"
               >
                 See template
               </button>
@@ -272,7 +272,7 @@ export default function TemplatePreviewSheet({
                 type="button"
                 onClick={() => void generate()}
                 disabled={loading || !prompt.trim()}
-                className="flex-1 rounded-xl bg-[#B4A2D7] px-5 py-3 text-sm font-semibold text-neutral-900 transition-opacity disabled:opacity-50"
+                className="flex-1 cursor-pointer rounded-xl bg-[#B4A2D7] px-5 py-3 text-sm font-semibold text-neutral-900 transition-opacity disabled:opacity-50"
               >
                 {loading ? "Generating carousel…" : "Generate carousel"}
               </button>

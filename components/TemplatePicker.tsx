@@ -59,7 +59,7 @@ export default function TemplatePicker({ templateId, onChange }: Props) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex max-w-[220px] items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[13px] text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+        className="flex max-w-[220px] cursor-pointer items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[13px] text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
       >
         <LayoutTemplate className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="truncate">
@@ -74,7 +74,7 @@ export default function TemplatePicker({ templateId, onChange }: Props) {
             type="button"
             aria-label="Close"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 cursor-pointer bg-black/50 backdrop-blur-sm"
           />
 
           <div className="relative flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -92,7 +92,7 @@ export default function TemplatePicker({ templateId, onChange }: Props) {
                   <button
                     type="button"
                     onClick={() => pick(null)}
-                    className="text-[13px] text-neutral-400 transition-colors hover:text-neutral-600"
+                    className="cursor-pointer text-[13px] text-neutral-400 transition-colors hover:text-neutral-600"
                   >
                     Clear
                   </button>
@@ -101,7 +101,7 @@ export default function TemplatePicker({ templateId, onChange }: Props) {
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close"
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 transition-colors hover:bg-neutral-200"
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-100 text-neutral-600 transition-colors hover:bg-neutral-200"
                 >
                   <X className="h-4 w-4" aria-hidden />
                 </button>
@@ -112,7 +112,7 @@ export default function TemplatePicker({ templateId, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => pick(null)}
-                className={`mb-6 flex w-full items-center justify-center rounded-xl border border-dashed px-4 py-3 text-[14px] transition-colors ${
+                className={`mb-6 flex w-full cursor-pointer items-center justify-center rounded-xl border border-dashed px-4 py-3 text-[14px] transition-colors ${
                   templateId === null
                     ? "border-neutral-900 text-neutral-900"
                     : "border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
@@ -162,7 +162,7 @@ function TemplateThumb({
       type="button"
       onClick={onSelect}
       title={template.title}
-      className={`group relative shrink-0 overflow-hidden rounded-lg ring-1 transition-shadow ${
+      className={`group relative shrink-0 cursor-pointer overflow-hidden rounded-lg ring-1 transition-shadow ${
         active
           ? "ring-2 ring-neutral-900"
           : "ring-black/5 hover:ring-neutral-300"

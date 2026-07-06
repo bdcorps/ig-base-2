@@ -104,7 +104,7 @@ export default function KanbanPage() {
                 key={i}
                 type="button"
                 onClick={() => setPrompt(p)}
-                className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:border-neutral-400"
+                className="cursor-pointer rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:border-neutral-400"
               >
                 Example {i + 1}
               </button>
@@ -113,7 +113,7 @@ export default function KanbanPage() {
               type="button"
               onClick={submit}
               disabled={!prompt.trim()}
-              className="ml-auto rounded-lg bg-neutral-900 px-4 py-2.5 text-base font-semibold text-white disabled:opacity-50"
+              className="ml-auto cursor-pointer rounded-lg bg-neutral-900 px-4 py-2.5 text-base font-semibold text-white disabled:opacity-50"
             >
               Add to board
             </button>
@@ -139,7 +139,7 @@ export default function KanbanPage() {
                   <button
                     type="button"
                     onClick={() => openInEditor(selected)}
-                    className="rounded-md outline-none ring-neutral-900/20 focus-visible:ring-2"
+                    className="cursor-pointer rounded-md outline-none ring-neutral-900/20 focus-visible:ring-2"
                     title="Open in editor"
                   >
                     <SlideRenderer
@@ -152,7 +152,7 @@ export default function KanbanPage() {
                 <button
                   type="button"
                   onClick={() => openInEditor(selected)}
-                  className="w-full rounded-lg bg-neutral-900 px-3 py-2.5 text-base font-semibold text-white"
+                  className="w-full cursor-pointer rounded-lg bg-neutral-900 px-3 py-2.5 text-base font-semibold text-white"
                 >
                   Open in editor
                 </button>

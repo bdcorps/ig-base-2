@@ -35,7 +35,7 @@ export default function PersistedDesignView({ prompt, design }: Props) {
                 key={i}
                 type="button"
                 onClick={() => setActiveIndex(i)}
-                className="flex flex-col items-center gap-2 rounded-xl outline-none ring-neutral-900/20 focus-visible:ring-2"
+                className="flex cursor-pointer flex-col items-center gap-2 rounded-xl outline-none ring-neutral-900/20 focus-visible:ring-2"
                 aria-label={`Slide ${i + 1}`}
               >
                 <span className="text-sm font-medium text-neutral-500">

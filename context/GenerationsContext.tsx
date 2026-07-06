@@ -21,6 +21,7 @@ interface GenerationsContextValue {
   generations: Generation[];
   hydrated: boolean;
   updateGeneration: (id: string, patch: Partial<Generation>) => void;
+  deleteGeneration: (id: string) => void;
   startGeneration: (
     prompt: string,
     slideCount: number,
@@ -85,6 +86,10 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
     setGenerations((prev) =>
       prev.map((g) => (g.id === id ? { ...g, ...patch } : g)),
     );
+  }, []);
+
+  const deleteGeneration = useCallback((id: string) => {
+    setGenerations((prev) => prev.filter((g) => g.id !== id));
   }, []);
 
   const runStream = useCallback(
@@ -176,6 +181,7 @@ export function GenerationsProvider({ children }: { children: ReactNode }) {
         generations,
         hydrated,
         updateGeneration,
+        deleteGeneration,
         startGeneration,
         importFromEditorSession,
         loadSampleDesign,

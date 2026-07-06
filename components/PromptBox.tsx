@@ -145,7 +145,7 @@ export default function PromptBox({
             onClick={onSubmit}
             disabled={!prompt.trim()}
             aria-label="Generate"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white transition-opacity disabled:opacity-40 cursor-pointer"
+            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white transition-opacity disabled:opacity-40"
           >
             <ArrowUp className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -158,7 +158,7 @@ export default function PromptBox({
             key={i}
             type="button"
             onClick={() => onPromptChange(p)}
-            className="rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[13px] text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            className="cursor-pointer rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[13px] text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
           >
             Example {i + 1}
           </button>
