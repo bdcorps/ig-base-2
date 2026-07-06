@@ -133,6 +133,7 @@ CRITICAL CHROMAKEY REQUIREMENTS:
 - Do NOT put green on the subject edges; keep the subject cleanly separated from the background.
 - Single isolated subject with crisp edges, suitable for cutout compositing.
 - No checkerboard or fake transparency patterns.
+- Never write any text, graphs on the image.
 
 Subject: `;
 
