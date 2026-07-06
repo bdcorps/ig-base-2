@@ -1,2 +1,3 @@
 - when building UIs, do not ever add subtitles to a title for sections.
 - all buttons should have cursor-pointer
+- use shadcn components as the default

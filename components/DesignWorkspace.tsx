@@ -4,6 +4,17 @@ import Controls from "@/components/Controls";
 import PostToInstagramModal from "@/components/PostToInstagramModal";
 import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useGeneration } from "@/context/GenerationsContext";
 import { useSlideEditHistory } from "@/hooks/useSlideEditHistory";
 import { trackEvent } from "@/lib/analytics";
@@ -14,7 +25,6 @@ import type {
   ImageElement,
   PaletteOption,
   ShapeElement,
-  SlideDesign,
   SlideElement,
   StackChild,
   Theme,
@@ -23,6 +33,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/schema";
 import { SHAPE_VARIANTS, shapeClipPath, type ShapeVariant } from "@/lib/shapes";
 import type { SlideState } from "@/lib/slideState";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Props {
@@ -38,7 +49,8 @@ type LayerOrderMenuState = {
 };
 
 export default function DesignWorkspace({ id }: Props) {
-  const { generation, updateGeneration, hydrated } = useGeneration(id);
+  const router = useRouter();
+  const { generation, updateGeneration, deleteGeneration, hydrated } = useGeneration(id);
   const [selection, setSelection] = useState<ElementSelection | null>(null);
   const [stackEditIndex, setStackEditIndex] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -390,11 +402,10 @@ export default function DesignWorkspace({ id }: Props) {
     });
   }
 
-  async function copyJson() {
-    if (!activeSlide) return;
-    const json = JSON.stringify(redactImages(activeSlide.design), null, 2);
-    await navigator.clipboard.writeText(json);
+  function deleteDesign() {
+    deleteGeneration(id);
     setMenuOpen(false);
+    router.push("/");
   }
 
   async function downloadZip() {
@@ -663,37 +674,53 @@ export default function DesignWorkspace({ id }: Props) {
                 </button>
               </>
             )}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="cursor-pointer rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
-                aria-label="More actions"
-                aria-expanded={menuOpen}
-              >
-                <EllipsisIcon className="h-4 w-4" />
-              </button>
-              {menuOpen && (
-                <>
-                  <button
-                    type="button"
-                    className="fixed inset-0 z-10 cursor-pointer"
-                    aria-label="Close menu"
-                    onClick={() => setMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-neutral-200 bg-white py-1 shadow-sm">
+            <AlertDialog>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="cursor-pointer rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
+                  aria-label="More actions"
+                  aria-expanded={menuOpen}
+                >
+                  <EllipsisIcon className="h-4 w-4" />
+                </button>
+                {menuOpen && (
+                  <>
                     <button
                       type="button"
-                      onClick={copyJson}
-                      disabled={!activeSlide}
-                      className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] text-primary hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Copy JSON
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                      className="fixed inset-0 z-10 cursor-pointer"
+                      aria-label="Close menu"
+                      onClick={() => setMenuOpen(false)}
+                    />
+
+                    <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-neutral-200 bg-white py-1 shadow-sm">
+                      <AlertDialogTrigger
+                        onClick={() => setMenuOpen(false)}
+                        className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </AlertDialogTrigger>
+                    </div>
+                  </>
+                )}
+              </div>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this design?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. The design and its slides will be permanently
+                    removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={deleteDesign}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </header>
 
@@ -1445,25 +1472,6 @@ function ChevronDownIcon({ className }: { className?: string }) {
   );
 }
 
-function FolderIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      aria-hidden
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-      />
-    </svg>
-  );
-}
-
 function EllipsisIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -1482,14 +1490,4 @@ function InstagramGlyph({ className }: { className?: string }) {
       <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
-}
-
-function redactImages(design: SlideDesign) {
-  const images = Object.fromEntries(
-    Object.entries(design.images).map(([k, v]) => [
-      k,
-      { prompt: v.prompt, url: `${v.url.slice(0, 32)}… (${v.url.length} chars)` },
-    ]),
-  );
-  return { ...design, images };
 }

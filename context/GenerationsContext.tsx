@@ -199,7 +199,7 @@ export function useGenerations() {
 }
 
 export function useGeneration(id: string | undefined) {
-  const { generations, updateGeneration, hydrated } = useGenerations();
+  const { generations, updateGeneration, deleteGeneration, hydrated } = useGenerations();
   const generation = generations.find((g) => g.id === id) ?? null;
-  return { generation, updateGeneration, hydrated };
+  return { generation, updateGeneration, deleteGeneration, hydrated };
 }

@@ -1,6 +1,16 @@
 "use client";
 
 import SlideRenderer from "@/components/SlideRenderer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { type Generation } from "@/lib/generations";
 import { Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import * as motion from "motion/react-client";
@@ -134,47 +144,22 @@ export default function GenerationPreviewCard({ generation, onOpen, onDelete }: 
         )}
       </div>
 
-      {deleteOpen && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby={`delete-generation-title-${generation.id}`}
-          aria-describedby={`delete-generation-description-${generation.id}`}
-          onClick={(event) => event.stopPropagation()}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
-        >
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
-            <h2
-              id={`delete-generation-title-${generation.id}`}
-              className="text-base font-semibold text-neutral-950"
-            >
-              Delete generation?
-            </h2>
-            <p
-              id={`delete-generation-description-${generation.id}`}
-              className="mt-2 text-sm leading-5 text-neutral-600"
-            >
-              This will remove this carousel from your recent generations.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDeleteOpen(false)}
-                className="cursor-pointer rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="cursor-pointer rounded-lg bg-red-600 px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-red-700"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this design?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this design from your library. You will not be able to recover it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
