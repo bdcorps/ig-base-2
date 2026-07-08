@@ -159,7 +159,9 @@
     "palette": {
       "background": "#aeb9c2",
       "text": "#2c343b",
-      "accent": "#5f7682"
+      "accent": "#5f7682",
+      "secondary": "#8a9aa6",
+      "neutral": "#7f8890"
     },
     "fonts": {
       "heading": "Fraunces",

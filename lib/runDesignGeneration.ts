@@ -32,13 +32,18 @@ import {
 } from "@/lib/schema";
 import { remixTemplateCover } from "@/lib/templateRemix";
 import { buildCover, findTemplate } from "@/lib/templates";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ModelMessage } from "ai";
 import { generateText, stepCountIs, tool } from "ai";
 import { promises as fs } from "fs";
 import path from "path";
 import { z } from "zod";
 
-const MODEL = "anthropic/claude-sonnet-5";
+const anthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const MODEL = anthropic("claude-sonnet-5");
 
 const STYLE_REFERENCE_IMAGE_URL =
   "https://i.ibb.co/zTsXjPG1/Clean-Shot-2026-06-20-at-20-50-57.png";
@@ -152,8 +157,8 @@ FOLLOW THE BRIEF LITERALLY
 - If the brief asks for a sticker, emoji-style icon, cutout, or illustration that should float over the slide (transparent background), call generateSticker — NOT generateImage. Place with addImageElement and fit:"contain".
 
 COLOR & FONTS (use SEMANTIC TOKENS so palettes can be swapped)
-- Element colors must be one of the tokens "background", "text", or "accent".
-- Also set the top-level palette (via setPalette) with concrete hex values for background/text/accent. If the brief specifies colors, map them to the palette (the main surface color → background, the main text color → text, the highlight color → accent). Otherwise choose a tasteful palette fitting the topic.
+- Element colors must be one of the tokens "background", "text", "accent", "secondary", or "neutral". Use "secondary" for supporting shapes/dividers/badges and "neutral" for muted borders, subtle fills, and quiet/secondary text.
+- Also set the top-level palette (via setPalette) with concrete hex values for background/text/accent/secondary/neutral. If the brief specifies colors, map them to the palette (the main surface color → background, the main text color → text, the highlight color → accent, a complementary supporting color → secondary, a muted low-saturation tone → neutral). Otherwise choose a tasteful 5-color palette fitting the topic.
 - Background is usually a solid "background" or a gradient between palette tokens.
 - font role "heading" for the display headline (fontWeight 400-500); "body" for sub-text, callouts, and CTAs.
 
@@ -309,7 +314,7 @@ export async function runDesignGeneration(
   let paletteOptions: PaletteOption[] = [];
   try {
     enforcedPalette = await resolveBrandPalette(brandKit, prompt);
-    paletteBrief = `\n\nBRAND PALETTE (mandatory — call setPalette with these EXACT hex values on every slide; do not invent other colors):\n- background: ${enforcedPalette.background}\n- text: ${enforcedPalette.text}\n- accent: ${enforcedPalette.accent}\nReuse this same palette across ALL slides. Prefer setSolidBackground with the token "background".`;
+    paletteBrief = `\n\nBRAND PALETTE (mandatory — call setPalette with these EXACT hex values on every slide; do not invent other colors):\n- background: ${enforcedPalette.background}\n- text: ${enforcedPalette.text}\n- accent: ${enforcedPalette.accent}\n- secondary: ${enforcedPalette.secondary}\n- neutral: ${enforcedPalette.neutral}\nReuse this same palette across ALL slides. Prefer setSolidBackground with the token "background".`;
     paletteOptions = [
       { id: "brand", name: "Brand kit", palette: enforcedPalette },
     ];
@@ -633,7 +638,7 @@ export async function runDesignGeneration(
             color: z
               .string()
               .describe(
-                'Semantic token ("background", "text", or "accent") or a hex color.',
+                'Semantic token ("background", "text", "accent", "secondary", or "neutral") or a hex color.',
               ),
           }),
           execute: async ({ color }) => {

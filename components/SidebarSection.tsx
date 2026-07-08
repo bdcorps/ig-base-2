@@ -14,7 +14,7 @@ export default function SidebarSection({ title, description, action, children }:
         <div className="min-w-0">
           <h2 className="text-[14px] font-semibold text-text-base">{title}</h2>
           {description && (
-            <p className="mt-1 text-[13px] leading-snug text-text-secondary">{description}</p>
+            <p className="mt-1 text-[13px] leading-snug text-gray-700">{description}</p>
           )}
         </div>
         {action}

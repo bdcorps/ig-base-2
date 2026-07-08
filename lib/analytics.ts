@@ -5,6 +5,7 @@ type AnalyticsEvent =
   | "export_design"
   | "submit_feedback"
   | "upload_image"
+  | "add_asset"
   | "mask_image_into_shape"
   | "post_to_instagram";
 

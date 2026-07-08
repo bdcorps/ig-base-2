@@ -8,6 +8,7 @@ import {
   DEFAULT_BRAND_KIT,
 } from "@/lib/brandKit";
 import { FONT_CATEGORIES, GOOGLE_FONTS, googleFontsHref } from "@/lib/fonts";
+import { Plus, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -426,9 +427,7 @@ export default function SettingsScreen() {
                         className="absolute right-1.5 top-1.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
                         aria-label="Remove photo"
                       >
-                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X className="h-3.5 w-3.5" strokeWidth={2.5} />
                       </button>
                     </div>
                   ))}
@@ -443,9 +442,7 @@ export default function SettingsScreen() {
                         <span className="text-[12px]">Uploading…</span>
                       ) : (
                         <>
-                          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                          </svg>
+                          <Plus className="h-6 w-6" strokeWidth={1.75} />
                           <span className="text-[11px]">Upload</span>
                         </>
                       )}

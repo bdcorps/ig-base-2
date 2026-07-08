@@ -19,7 +19,7 @@ export const CANVAS_HEIGHT = 1350;
 export const ColorSchema = z
   .string()
   .describe(
-    'A semantic palette token ("background", "text", or "accent") or a raw hex color like "#ff5500". Prefer tokens so the palette can be swapped.',
+    'A semantic palette token ("background", "text", "accent", "secondary", or "neutral") or a raw hex color like "#ff5500". Prefer tokens so the palette can be swapped. "secondary" is a supporting color for shapes/dividers/badges; "neutral" is a muted tone for borders, subtle fills, and quiet text.',
   );
 
 export const FontRoleSchema = z
@@ -173,6 +173,12 @@ export const PaletteSchema = z.object({
   background: z.string().describe("Background hex color, e.g. \"#a0bcec\"."),
   text: z.string().describe("Primary text hex color."),
   accent: z.string().describe("Accent/highlight hex color."),
+  secondary: z
+    .string()
+    .describe("Supporting hex color for shapes, dividers, and badges."),
+  neutral: z
+    .string()
+    .describe("Muted hex color for borders, subtle fills, and quiet text."),
 });
 
 export const AgentDesignSchema = z.object({
@@ -215,7 +221,20 @@ export interface Palette {
   background: string;
   text: string;
   accent: string;
+  secondary: string;
+  neutral: string;
 }
+
+/** The five semantic palette roles, in display order. */
+export const PALETTE_ROLES = [
+  "background",
+  "text",
+  "accent",
+  "secondary",
+  "neutral",
+] as const;
+
+export type PaletteRole = (typeof PALETTE_ROLES)[number];
 
 export interface Fonts {
   heading: string;
@@ -236,10 +255,21 @@ export interface PaletteOption {
 /** Resolve a schema color (token or hex) to a concrete CSS color. */
 export function resolveColor(color: Color | undefined, palette: Palette): string | undefined {
   if (color == null) return undefined;
-  if (color === "background" || color === "text" || color === "accent") {
-    return palette[color];
+  switch (color) {
+    case "background":
+      return palette.background;
+    case "text":
+      return palette.text;
+    case "accent":
+      return palette.accent;
+    // Fall back gracefully for palettes saved before the 5-role system.
+    case "secondary":
+      return palette.secondary ?? palette.accent;
+    case "neutral":
+      return palette.neutral ?? palette.text;
+    default:
+      return color;
   }
-  return color;
 }
 
 /** Resolve a font role to the user-selected Google font family. */

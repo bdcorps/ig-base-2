@@ -1,6 +1,7 @@
 "use client";
 
 import Controls from "@/components/Controls";
+import DesignAssetRail, { ASSET_DRAG_TYPE, type PlacedAsset } from "@/components/DesignAssetRail";
 import PostToInstagramModal from "@/components/PostToInstagramModal";
 import SidebarSection from "@/components/SidebarSection";
 import SlideRenderer, { type ElementSelection } from "@/components/SlideRenderer";
@@ -32,6 +33,18 @@ import type {
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/schema";
 import { SHAPE_VARIANTS, shapeClipPath, type ShapeVariant } from "@/lib/shapes";
 import type { SlideState } from "@/lib/slideState";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Ellipsis,
+  Image as ImageIcon,
+  Layers,
+  Loader2,
+  Square,
+  SquarePlus,
+  Type,
+  Ungroup,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -242,8 +255,8 @@ export default function DesignWorkspace({ id }: Props) {
     }
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-        <p className="text-[14px] text-secondary">Design not found</p>
-        <Link href="/" className="mt-2 text-[13px] text-text-tertiary underline hover:text-secondary">
+        <p className="text-[14px] text-gray-700">Design not found</p>
+        <Link href="/" className="mt-2 text-[13px] text-text-tertiary underline hover:text-gray-700">
           Start a new design
         </Link>
       </div>
@@ -430,32 +443,47 @@ export default function DesignWorkspace({ id }: Props) {
     }
   }
 
-  async function addImageFromFile(file: File) {
-    if (!activeSlide) return;
-    const dataUrl = await readImageFile(file);
-    const { width: naturalW, height: naturalH } = await readImageDimensions(dataUrl);
-    const { url, imageId } = await uploadImage(dataUrl);
-    const targetWidth = Math.round(CANVAS_WIDTH * 0.6);
-    const ratio = naturalW > 0 ? naturalH / naturalW : 1;
+  /**
+   * Add an image element (with its image record) to a slide. Defaults to the
+   * active slide, centered; pass `slideIndex`/`center` to drop at a point.
+   */
+  function placeImageElement(opts: {
+    imageId: string;
+    url: string;
+    prompt: string;
+    naturalW: number;
+    naturalH: number;
+    fit: "cover" | "contain";
+    slideIndex?: number;
+    /** Canvas-space (0-1080, 0-1350) coordinates for the element's center. */
+    center?: { x: number; y: number };
+  }) {
+    const slideIdx = opts.slideIndex ?? gen.activeSlideIndex;
+    const slide = gen.slides[slideIdx];
+    if (!slide) return;
+    const targetWidth = Math.round(CANVAS_WIDTH * (opts.fit === "contain" ? 0.4 : 0.6));
+    const ratio = opts.naturalW > 0 ? opts.naturalH / opts.naturalW : 1;
     const width = targetWidth;
     const height = Math.round(targetWidth * ratio);
+    const cx = opts.center?.x ?? CANVAS_WIDTH / 2;
+    const cy = opts.center?.y ?? CANVAS_HEIGHT / 2;
     const newElement: ImageElement = {
       kind: "image",
-      x: Math.round((CANVAS_WIDTH - width) / 2),
-      y: Math.round((CANVAS_HEIGHT - height) / 2),
+      x: Math.round(cx - width / 2),
+      y: Math.round(cy - height / 2),
       width,
       height,
       rotation: 0,
-      imageId,
-      fit: "cover",
+      imageId: opts.imageId,
+      fit: opts.fit,
       borderRadius: 0,
       opacity: 1,
     };
 
     pushHistory();
-    const slideIdx = gen.activeSlideIndex;
-    const newIndex = activeSlide.design.elements.length;
+    const newIndex = slide.design.elements.length;
     updateGeneration(id, {
+      activeSlideIndex: slideIdx,
       slides: gen.slides.map((s, i) =>
         i !== slideIdx
           ? s
@@ -465,7 +493,7 @@ export default function DesignWorkspace({ id }: Props) {
               ...s.design,
               images: {
                 ...s.design.images,
-                [imageId]: { url, prompt: file.name },
+                [opts.imageId]: { url: opts.url, prompt: opts.prompt },
               },
               elements: [...s.design.elements, newElement],
             },
@@ -474,7 +502,69 @@ export default function DesignWorkspace({ id }: Props) {
     });
     setSelection({ elementIndex: newIndex });
     setStackEditIndex(null);
-    trackEvent("upload_image", { generation_id: id, slide_index: slideIdx });
+  }
+
+  async function addImageFromFile(file: File) {
+    if (!activeSlide) return;
+    const dataUrl = await readImageFile(file);
+    const { width: naturalW, height: naturalH } = await readImageDimensions(dataUrl);
+    const { url, imageId } = await uploadImage(dataUrl);
+    placeImageElement({ imageId, url, prompt: file.name, naturalW, naturalH, fit: "cover" });
+    trackEvent("upload_image", { generation_id: id, slide_index: gen.activeSlideIndex });
+  }
+
+  /** Place an image/sticker (built-in, generated, or reused) from a hosted URL. */
+  async function placeAsset(asset: PlacedAsset) {
+    if (!activeSlide) return;
+    try {
+      const { width, height } = await readImageDimensions(asset.url);
+      placeImageElement({
+        imageId: asset.imageId,
+        url: asset.url,
+        prompt: asset.prompt,
+        naturalW: width,
+        naturalH: height,
+        fit: asset.fit,
+      });
+      trackEvent("add_asset", {
+        generation_id: id,
+        slide_index: gen.activeSlideIndex,
+        fit: asset.fit,
+      });
+    } catch (err) {
+      updateGeneration(id, {
+        error: err instanceof Error ? err.message : "Failed to add asset",
+      });
+    }
+  }
+
+  /** Place an asset at a specific slide + canvas-space center (drag-and-drop). */
+  async function placeAssetAt(
+    asset: PlacedAsset,
+    target: { slideIndex: number; center: { x: number; y: number } },
+  ) {
+    try {
+      const { width, height } = await readImageDimensions(asset.url);
+      placeImageElement({
+        imageId: asset.imageId,
+        url: asset.url,
+        prompt: asset.prompt,
+        naturalW: width,
+        naturalH: height,
+        fit: asset.fit,
+        slideIndex: target.slideIndex,
+        center: target.center,
+      });
+      trackEvent("add_asset", {
+        generation_id: id,
+        slide_index: target.slideIndex,
+        fit: asset.fit,
+      });
+    } catch (err) {
+      updateGeneration(id, {
+        error: err instanceof Error ? err.message : "Failed to add asset",
+      });
+    }
   }
 
   function addShape(variant: ShapeVariant) {
@@ -574,14 +664,52 @@ export default function DesignWorkspace({ id }: Props) {
     return Array.from(e.dataTransfer.items ?? []).some((item) => item.kind === "file");
   }
 
+  function dragHasAsset(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types ?? []).includes(ASSET_DRAG_TYPE);
+  }
+
   function onCanvasDragOver(e: React.DragEvent) {
-    if (!activeSlide || !dragHasFile(e)) return;
+    if (!activeSlide || (!dragHasFile(e) && !dragHasAsset(e))) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   }
 
+  /** Map a drop event to the slide under the pointer + canvas-space coordinates. */
+  function resolveDropTarget(
+    e: React.DragEvent,
+  ): { slideIndex: number; center: { x: number; y: number } } | null {
+    const slideEl = (e.target as HTMLElement | null)?.closest<HTMLElement>("[data-slide-index]");
+    const exportEl = slideEl?.querySelector<HTMLElement>("[data-slide-export]");
+    if (!slideEl || !exportEl) return null;
+    const slideIndex = Number(slideEl.dataset.slideIndex);
+    if (Number.isNaN(slideIndex)) return null;
+    const rect = exportEl.getBoundingClientRect();
+    const scale = rect.width > 0 ? CANVAS_WIDTH / rect.width : 1;
+    const x = Math.max(0, Math.min(CANVAS_WIDTH, (e.clientX - rect.left) * scale));
+    const y = Math.max(0, Math.min(CANVAS_HEIGHT, (e.clientY - rect.top) * scale));
+    return { slideIndex, center: { x, y } };
+  }
+
   async function onCanvasDrop(e: React.DragEvent) {
     if (!activeSlide) return;
+
+    const assetRaw = e.dataTransfer.getData(ASSET_DRAG_TYPE);
+    if (assetRaw) {
+      e.preventDefault();
+      let asset: PlacedAsset;
+      try {
+        asset = JSON.parse(assetRaw) as PlacedAsset;
+      } catch {
+        return;
+      }
+      const target = resolveDropTarget(e) ?? {
+        slideIndex: gen.activeSlideIndex,
+        center: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
+      };
+      await placeAssetAt(asset, target);
+      return;
+    }
+
     e.preventDefault();
     const file = Array.from(e.dataTransfer.files ?? []).find((f) =>
       f.type.startsWith("image/"),
@@ -610,221 +738,244 @@ export default function DesignWorkspace({ id }: Props) {
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-200/80 bg-white px-4 py-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <h1 className="truncate text-[14px] font-medium text-text-base">
-              {generationTitle(gen.prompt)}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {activeSlide && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShapeMenuOpen((v) => !v)}
-                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
-                  aria-expanded={shapeMenuOpen}
-                >
-                  <ShapePlusIcon className="h-4 w-4" />
-                  Add shape
-                </button>
-                {shapeMenuOpen && (
-                  <>
-                    <button
-                      type="button"
-                      className="fixed inset-0 z-10 cursor-pointer"
-                      aria-label="Close menu"
-                      onClick={() => setShapeMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 top-full z-20 mt-1 grid w-[200px] grid-cols-2 gap-1 rounded-lg border border-neutral-200 bg-white p-1.5 shadow-sm">
-                      {SHAPE_VARIANTS.map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => addShape(v.id)}
-                          className="flex cursor-pointer flex-col items-center gap-1.5 rounded-md px-2 py-2 text-[12px] text-primary hover:bg-neutral-50"
-                        >
-                          <ShapeGlyph variant={v.id} className="h-6 w-6 text-secondary" />
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-            {gen.slides.length > 0 && gen.status === "complete" && (
-              <>
-                <button
-                  type="button"
-                  onClick={downloadZip}
-                  disabled={exporting}
-                  className="cursor-pointer rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
-                >
-                  {exporting ? "Exporting…" : "Export"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPostOpen(true)}
-                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
-                >
-                  <InstagramGlyph className="h-4 w-4" />
-                  Post to IG
-                </button>
-              </>
-            )}
-            <AlertDialog>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="cursor-pointer rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-secondary"
-                  aria-label="More actions"
-                  aria-expanded={menuOpen}
-                >
-                  <EllipsisIcon className="h-4 w-4" />
-                </button>
-                {menuOpen && (
-                  <>
-                    <button
-                      type="button"
-                      className="fixed inset-0 z-10 cursor-pointer"
-                      aria-label="Close menu"
-                      onClick={() => setMenuOpen(false)}
-                    />
-
-                    <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-neutral-200 bg-white py-1 shadow-sm">
-                      <AlertDialogTrigger
-                        onClick={() => setMenuOpen(false)}
-                        className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </AlertDialogTrigger>
-                    </div>
-                  </>
-                )}
-              </div>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this design?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. The design and its slides will be permanently
-                    removed.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={deleteDesign}>
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </header>
-
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <section
-            className="flex min-w-0 flex-1 flex-col overflow-y-auto"
-            onDragOver={onCanvasDragOver}
-            onDrop={onCanvasDrop}
-          >
-            <div className="flex flex-col items-center gap-10 px-8 py-6">
-              {gen.slides.length > 0 ? (
-                gen.slides.map((slide, i) => {
-                  const isActive = i === gen.activeSlideIndex;
-                  return (
-                    <div
-                      key={i}
-                      className="flex flex-col items-center gap-2"
-                      data-active-canvas={isActive ? "" : undefined}
-                      onClick={() => setActiveSlideIndex(i)}
-                    >
-                      <SlideRenderer
-                        design={slide.design}
-                        theme={slide.theme}
-                        displayWidth={440}
-                        editable={isActive}
-                        selection={isActive ? selection : null}
-                        stackEditIndex={isActive ? stackEditIndex : null}
-                        onSelect={isActive ? handleSelect : undefined}
-                        onEnterStackEdit={isActive ? enterStackEdit : undefined}
-                        onElementChange={isActive ? updateElement : undefined}
-                        onStackChildChange={isActive ? updateStackChild : undefined}
-                        onElementContextMenu={
-                          isActive
-                            ? (nextSelection, position) => {
-                              setSelection(nextSelection);
-                              setStackEditIndex(null);
-                              setLayerOrderMenu({
-                                selection: nextSelection,
-                                x: position.x,
-                                y: position.y,
-                              });
-                            }
-                            : undefined
-                        }
-                        onEditBegin={isActive ? pushHistory : undefined}
-                        onImageDropOnShape={isActive ? maskImageIntoShape : undefined}
-                      />
-                    </div>
-                  );
-                })
-              ) : (
-                <div
-                  className="flex items-center justify-center rounded-xl border border-dashed border-neutral-200 bg-neutral-50/50 text-[14px] text-text-tertiary"
-                  style={{ width: 440, height: 550 }}
-                >
-                  {gen.status === "running"
-                    ? "Building your carousel…"
-                    : "Your slides will appear here"}
-                </div>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <DesignAssetRail
+          images={activeSlide?.design.images ?? {}}
+          onPlaceAsset={placeAsset}
+          onUploadFile={addImageFromFile}
+          disabled={!activeSlide}
+        />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-200/80 bg-white px-4 py-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => router.push("/")}
+                className="flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100"
+                aria-label="Back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <h1 className="truncate text-[14px] font-medium text-text-base">
+                {generationTitle(gen.prompt)}
+              </h1>
+              {gen.status === "running" && (
+                <Loader2
+                  className="h-4 w-4 shrink-0 animate-spin text-text-tertiary [animation-duration:0.5s]"
+                  aria-label="Generating"
+                />
               )}
             </div>
-          </section>
+            <div className="flex shrink-0 items-center gap-2">
+              {activeSlide && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShapeMenuOpen((v) => !v)}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+                    aria-expanded={shapeMenuOpen}
+                  >
+                    <ShapePlusIcon className="h-4 w-4" />
+                    Add shape
+                  </button>
+                  {shapeMenuOpen && (
+                    <>
+                      <button
+                        type="button"
+                        className="fixed inset-0 z-10 cursor-pointer"
+                        aria-label="Close menu"
+                        onClick={() => setShapeMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 top-full z-20 mt-1 grid w-[200px] grid-cols-2 gap-1 rounded-lg border border-neutral-200 bg-white p-1.5 shadow-sm">
+                        {SHAPE_VARIANTS.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => addShape(v.id)}
+                            className="flex cursor-pointer flex-col items-center gap-1.5 rounded-md px-2 py-2 text-[12px] text-primary hover:bg-neutral-50"
+                          >
+                            <ShapeGlyph variant={v.id} className="h-6 w-6 text-gray-700" />
+                            {v.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {gen.slides.length > 0 && gen.status === "complete" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={downloadZip}
+                    disabled={exporting}
+                    className="cursor-pointer rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                  >
+                    {exporting ? "Exporting…" : "Export"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPostOpen(true)}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50"
+                  >
+                    <InstagramGlyph className="h-4 w-4" />
+                    Post to IG
+                  </button>
+                </>
+              )}
+              <AlertDialog>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    className="cursor-pointer rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-gray-700"
+                    aria-label="More actions"
+                    aria-expanded={menuOpen}
+                  >
+                    <EllipsisIcon className="h-4 w-4" />
+                  </button>
+                  {menuOpen && (
+                    <>
+                      <button
+                        type="button"
+                        className="fixed inset-0 z-10 cursor-pointer"
+                        aria-label="Close menu"
+                        onClick={() => setMenuOpen(false)}
+                      />
 
-          {showThemePanel && (
-            <aside
-              data-inspector=""
-              className="hidden w-[348px] shrink-0 overflow-y-auto border-l border-neutral-200/80 bg-background lg:block"
+                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-neutral-200 bg-white py-1 shadow-sm">
+                        <AlertDialogTrigger
+                          onClick={() => setMenuOpen(false)}
+                          className="block w-full cursor-pointer px-3 py-1.5 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
+                        >
+                          Delete
+                        </AlertDialogTrigger>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this design?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. The design and its slides will be permanently
+                      removed.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={deleteDesign}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </header>
+
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <section
+              className="flex min-w-0 flex-1 flex-col overflow-y-auto"
+              onDragOver={onCanvasDragOver}
+              onDrop={onCanvasDrop}
             >
-              {selection !== null && activeSlide && (() => {
-                const el = activeSlide.design.elements[selection.elementIndex];
-                if (!el) return null;
+              <div className="flex flex-col items-center gap-10 px-8 py-6">
+                {gen.slides.length > 0 ? (
+                  gen.slides.map((slide, i) => {
+                    const isActive = i === gen.activeSlideIndex;
+                    return (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center gap-2"
+                        data-active-canvas={isActive ? "" : undefined}
+                        data-slide-index={i}
+                        onClick={() => setActiveSlideIndex(i)}
+                      >
+                        <SlideRenderer
+                          design={slide.design}
+                          theme={slide.theme}
+                          displayWidth={440}
+                          editable={isActive}
+                          selection={isActive ? selection : null}
+                          stackEditIndex={isActive ? stackEditIndex : null}
+                          onSelect={isActive ? handleSelect : undefined}
+                          onEnterStackEdit={isActive ? enterStackEdit : undefined}
+                          onElementChange={isActive ? updateElement : undefined}
+                          onStackChildChange={isActive ? updateStackChild : undefined}
+                          onElementContextMenu={
+                            isActive
+                              ? (nextSelection, position) => {
+                                setSelection(nextSelection);
+                                setStackEditIndex(null);
+                                setLayerOrderMenu({
+                                  selection: nextSelection,
+                                  x: position.x,
+                                  y: position.y,
+                                });
+                              }
+                              : undefined
+                          }
+                          onEditBegin={isActive ? pushHistory : undefined}
+                          onImageDropOnShape={isActive ? maskImageIntoShape : undefined}
+                        />
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div
+                    className="flex items-center justify-center rounded-xl border border-dashed border-neutral-200 bg-neutral-50/50 text-[14px] text-text-tertiary"
+                    style={{ width: 440, height: 550 }}
+                  >
+                    {gen.status === "running"
+                      ? "Building your carousel…"
+                      : "Your slides will appear here"}
+                  </div>
+                )}
+              </div>
+            </section>
 
-                if (selection.childIndex != null && el.kind === "stack") {
-                  const child = el.children[selection.childIndex];
-                  if (!child) return null;
+            {showThemePanel && (
+              <aside
+                data-inspector=""
+                className="hidden w-[348px] shrink-0 overflow-y-auto border-l border-neutral-200/80 bg-background lg:block"
+              >
+                {selection !== null && activeSlide && (() => {
+                  const el = activeSlide.design.elements[selection.elementIndex];
+                  if (!el) return null;
+
+                  if (selection.childIndex != null && el.kind === "stack") {
+                    const child = el.children[selection.childIndex];
+                    if (!child) return null;
+                    return (
+                      <StackChildInspector
+                        child={child}
+                        onChange={(patch) =>
+                          updateStackChild(selection.elementIndex, selection.childIndex!, patch, true)
+                        }
+                        onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
+                      />
+                    );
+                  }
+
                   return (
-                    <StackChildInspector
-                      child={child}
-                      onChange={(patch) =>
-                        updateStackChild(selection.elementIndex, selection.childIndex!, patch, true)
-                      }
+                    <ElementInspector
+                      element={el}
+                      onChange={(patch) => updateElement(selection.elementIndex, patch, true)}
                       onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
+                      onSeparateImage={() => separateShapeImage(selection.elementIndex)}
                     />
                   );
-                }
-
-                return (
-                  <ElementInspector
-                    element={el}
-                    onChange={(patch) => updateElement(selection.elementIndex, patch, true)}
-                    onImageChange={(imageId, patch) => updateSlideImage(imageId, patch, true)}
-                    onSeparateImage={() => separateShapeImage(selection.elementIndex)}
-                  />
-                );
-              })()}
-              <Controls
-                theme={sidebarTheme}
-                onChange={updateTheme}
-                paletteOptions={gen.generatedPalettes}
-                activePaletteId={gen.activePaletteId}
-                onSelectPalette={selectPalette}
-              />
-            </aside>
-          )}
+                })()}
+                <Controls
+                  theme={sidebarTheme}
+                  onChange={updateTheme}
+                  paletteOptions={gen.generatedPalettes}
+                  activePaletteId={gen.activePaletteId}
+                  onSelectPalette={selectPalette}
+                />
+              </aside>
+            )}
+          </div>
         </div>
       </div>
 
@@ -979,7 +1130,7 @@ function ElementInspector({
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
-      <p className="mb-2 text-[12px] text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-gray-700">{label}</p>
       <input
         type="number"
         value={Math.round(value)}
@@ -1064,7 +1215,7 @@ function ElementInspector({
             {num("Font size", element.fontSize, "fontSize")}
             {num("Weight", element.fontWeight, "fontWeight")}
             <div>
-              <p className="mb-2 text-[12px] text-secondary">Align</p>
+              <p className="mb-2 text-[12px] text-gray-700">Align</p>
               <div className="relative">
                 <select
                   value={element.align}
@@ -1110,7 +1261,7 @@ function ReplaceImageField({
 
   return (
     <div>
-      <p className="mb-2 text-[12px] text-secondary">Replace image</p>
+      <p className="mb-2 text-[12px] text-gray-700">Replace image</p>
       <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2.5 text-[13px] font-medium text-primary transition-colors hover:bg-neutral-50 has-disabled:cursor-not-allowed has-disabled:opacity-50">
         {uploading ? "Uploading…" : "Choose file…"}
         <input
@@ -1157,7 +1308,7 @@ function ImageInspectorFields({
         onChange={(value) => onFitChange(value as "cover" | "contain")}
       />
       <div>
-        <p className="mb-2 text-[12px] text-secondary">Border radius</p>
+        <p className="mb-2 text-[12px] text-gray-700">Border radius</p>
         <input
           type="number"
           value={Math.round(borderRadius)}
@@ -1167,7 +1318,7 @@ function ImageInspectorFields({
       </div>
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-[12px] text-secondary">Opacity</p>
+          <p className="text-[12px] text-gray-700">Opacity</p>
           <span className="text-[12px] font-medium text-text-tertiary">
             {Math.round((opacity ?? 1) * 100)}%
           </span>
@@ -1211,11 +1362,11 @@ function ShapeInspectorFields({
         <>
           <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-neutral-100">
-              <ElementKindIcon kind="image" className="h-5 w-5 text-secondary" />
+              <ElementKindIcon kind="image" className="h-5 w-5 text-gray-700" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium text-text-base">Masked image</p>
-              <p className="truncate text-[12px] text-secondary">Clipped to this shape</p>
+              <p className="truncate text-[12px] text-gray-700">Clipped to this shape</p>
             </div>
           </div>
           <SelectField
@@ -1251,7 +1402,7 @@ function ShapeInspectorFields({
             ]}
             onChange={(value) => onChange({ color: value })}
           />
-          <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[12px] leading-relaxed text-secondary">
+          <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[12px] leading-relaxed text-gray-700">
             Drag an image onto this shape to mask it into the shape.
           </p>
         </>
@@ -1271,7 +1422,7 @@ function StackChildInspector({
 }) {
   const num = (label: string, value: number, key: string) => (
     <div>
-      <p className="mb-2 text-[12px] text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-gray-700">{label}</p>
       <input
         type="number"
         value={Math.round(value)}
@@ -1291,11 +1442,11 @@ function StackChildInspector({
     <SidebarSection title="Stack item" description={descriptions[child.kind]}>
       <div className="mb-4 flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-neutral-100">
-          <ElementKindIcon kind={child.kind} className="h-5 w-5 text-secondary" />
+          <ElementKindIcon kind={child.kind} className="h-5 w-5 text-gray-700" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium capitalize text-text-base">{child.kind}</p>
-          <p className="truncate text-[12px] text-secondary">
+          <p className="truncate text-[12px] text-gray-700">
             {child.kind === "text"
               ? child.content.slice(0, 40)
               : `${child.width}×${"height" in child ? child.height : "—"}px`}
@@ -1306,7 +1457,7 @@ function StackChildInspector({
       <div className="flex flex-col gap-3">
         {child.kind === "text" && (
           <div>
-            <p className="mb-2 text-[12px] text-secondary">Content</p>
+            <p className="mb-2 text-[12px] text-gray-700">Content</p>
             <textarea
               value={child.content}
               onChange={(e) =>
@@ -1365,7 +1516,7 @@ function SelectField({
 }) {
   return (
     <div>
-      <p className="mb-2 text-[12px] text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-gray-700">{label}</p>
       <div className="relative">
         <select
           value={value}
@@ -1391,51 +1542,18 @@ function ElementKindIcon({
   kind: SlideElement["kind"] | StackChild["kind"];
   className?: string;
 }) {
-  if (kind === "stack") {
-    return (
-      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-      </svg>
-    );
-  }
-  if (kind === "text") {
-    return (
-      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h10M4 17h14" />
-      </svg>
-    );
-  }
-  if (kind === "image") {
-    return (
-      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    );
-  }
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-    </svg>
-  );
+  if (kind === "stack") return <Layers className={className} aria-hidden />;
+  if (kind === "text") return <Type className={className} aria-hidden />;
+  if (kind === "image") return <ImageIcon className={className} aria-hidden />;
+  return <Square className={className} aria-hidden />;
 }
 
 function ShapePlusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h9a1 1 0 011 1v6" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5v13a1 1 0 001 1h6" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14v6m3-3h-6" />
-    </svg>
-  );
+  return <SquarePlus className={className} aria-hidden />;
 }
 
 function SeparateIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H5a1 1 0 00-1 1v4m0 4v4a1 1 0 001 1h4m6-14h4a1 1 0 011 1v4m0 4v4a1 1 0 01-1 1h-4" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" strokeDasharray="2 3" />
-    </svg>
-  );
+  return <Ungroup className={className} aria-hidden />;
 }
 
 /** Small filled preview of a shape variant for the "Add shape" menu. */
@@ -1465,21 +1583,11 @@ function ShapeGlyph({ variant, className }: { variant: ShapeVariant; className?:
 }
 
 function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  );
+  return <ChevronDown className={className} aria-hidden />;
 }
 
 function EllipsisIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <circle cx="5" cy="12" r="1.5" />
-      <circle cx="12" cy="12" r="1.5" />
-      <circle cx="19" cy="12" r="1.5" />
-    </svg>
-  );
+  return <Ellipsis className={className} aria-hidden />;
 }
 
 function InstagramGlyph({ className }: { className?: string }) {

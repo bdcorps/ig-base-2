@@ -1,9 +1,12 @@
 "use client";
 
 import SidebarSection from "@/components/SidebarSection";
+import type { BrandKit } from "@/lib/brandKit";
 import { FONT_CATEGORIES, googleFontsHref } from "@/lib/fonts";
-import type { Palette, PaletteOption, Theme } from "@/lib/schema";
-import { useEffect, type ReactNode } from "react";
+import { brandPaletteHeuristic } from "@/lib/paletteUtils";
+import { PALETTE_ROLES, type Palette, type PaletteOption, type Theme } from "@/lib/schema";
+import { ChevronDown, Shuffle } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 interface Props {
   theme: Theme;
@@ -14,21 +17,26 @@ interface Props {
   variant?: "sidebar" | "embedded";
 }
 
-const PALETTE_KEYS = ["background", "text", "accent"] as const;
+const PALETTE_KEYS = PALETTE_ROLES;
 
 function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  );
+  return <ChevronDown className={className} aria-hidden />;
+}
+
+/** Randomly reassign the palette's five colors across the semantic roles. */
+function shufflePalette(palette: Palette): Palette {
+  const values = PALETTE_KEYS.map((k) => palette[k]);
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  return {
+    background: values[0],
+    text: values[1],
+    accent: values[2],
+    secondary: values[3],
+    neutral: values[4],
+  };
 }
 
 function PaletteCard({
@@ -40,27 +48,33 @@ function PaletteCard({
   palette: Palette;
   name: string;
   selected: boolean;
-  onApply: () => void;
+  onApply: (palette: Palette) => void;
 }) {
+  const apply = () => onApply(shufflePalette(palette));
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={onApply}
+      onClick={apply}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onApply();
+          apply();
         }
       }}
-      title={`Apply ${name}`}
-      aria-label={`Apply palette: ${name}`}
+      title={`Shuffle & apply ${name}`}
+      aria-label={`Shuffle and apply palette: ${name}`}
       aria-pressed={selected}
-      className={`flex h-10 w-full shrink-0 cursor-pointer overflow-hidden rounded-md transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20`}
+      className={`group relative flex h-10 w-full shrink-0 cursor-pointer overflow-hidden rounded-md transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-base/20`}
     >
       {PALETTE_KEYS.map((k) => (
         <span key={k} style={{ background: palette[k] }} className="min-w-0 flex-1" />
       ))}
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white shadow-sm backdrop-blur-sm">
+          <Shuffle className="h-3.5 w-3.5" aria-hidden />
+        </span>
+      </span>
     </div>
     // <button
     //   type="button"
@@ -79,7 +93,7 @@ function PaletteCard({
     //   </div>
     //   <div className="min-w-0 flex-1">
     //     <p className="truncate text-[13px] font-medium text-text-base">{name}</p>
-    //     <p className="truncate text-[12px] text-text-secondary">Apply to all slides</p>
+    //     <p className="truncate text-[12px] text-gray-700">Apply to all slides</p>
     //   </div>
     // </button>
   );
@@ -96,7 +110,7 @@ function FontSelect({
 }) {
   return (
     <div>
-      <p className="mb-2 text-[12px] text-text-secondary">{label}</p>
+      <p className="mb-2 text-[12px] text-gray-700">{label}</p>
       <div className="relative">
         <select
           value={value}
@@ -128,6 +142,8 @@ export default function Controls({
   onSelectPalette,
   variant = "sidebar",
 }: Props) {
+  const [brandPalette, setBrandPalette] = useState<PaletteOption | null>(null);
+
   useEffect(() => {
     const id = "design-google-fonts";
     let link = document.getElementById(id) as HTMLLinkElement | null;
@@ -139,6 +155,30 @@ export default function Controls({
     }
     link.href = googleFontsHref([theme.fonts.heading, theme.fonts.body]);
   }, [theme.fonts.heading, theme.fonts.body]);
+
+  // Load the user's global brand kit so its palette is always available here,
+  // alongside the palettes generated for this specific design.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/settings");
+        if (!res.ok) return;
+        const json = (await res.json()) as { brandKit?: BrandKit };
+        if (cancelled || !json.brandKit) return;
+        setBrandPalette({
+          id: "brand-kit",
+          name: "Brand kit",
+          palette: brandPaletteHeuristic(json.brandKit),
+        });
+      } catch {
+        // Ignore — brand palette is optional here.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setColor = (key: keyof Palette, value: string) =>
     onChange({ ...theme, palette: { ...theme.palette, [key]: value } });
@@ -159,32 +199,52 @@ export default function Controls({
 
   const sections = (
     <>
-      {paletteOptions.length > 0 &&
+      {(paletteOptions.length > 0 || brandPalette) &&
         wrap(
           "Color palettes",
-          "Choose from generated palettes to update colors across all slides.",
-          <>
-            <div className="flex flex-col gap-2">
-              {paletteOptions.map((option) => (
+          "Apply a palette to update colors across all slides.",
+          <div className="flex flex-col gap-4">
+            {paletteOptions.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {brandPalette && (
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+                    Generated for this design
+                  </p>
+                )}
+                {paletteOptions.map((option) => (
+                  <PaletteCard
+                    key={option.id}
+                    palette={option.palette}
+                    name={option.name}
+                    selected={option.id === activePaletteId}
+                    onApply={(palette) => onSelectPalette?.({ ...option, palette })}
+                  />
+                ))}
+              </div>
+            )}
+            {brandPalette && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+                  From your brand kit
+                </p>
                 <PaletteCard
-                  key={option.id}
-                  palette={option.palette}
-                  name={option.name}
-                  selected={option.id === activePaletteId}
-                  onApply={() => onSelectPalette?.(option)}
+                  palette={brandPalette.palette}
+                  name={brandPalette.name}
+                  selected={brandPalette.id === activePaletteId}
+                  onApply={(palette) => onSelectPalette?.({ ...brandPalette, palette })}
                 />
-              ))}
-            </div>
-          </>,
+              </div>
+            )}
+          </div>,
         )}
 
       {wrap(
         "Colors",
-        "Fine-tune the background, text, and accent colors for this design.",
+        "Fine-tune the background, text, accent, secondary, and neutral colors for this design.",
         <div className="flex flex-col gap-3">
           {PALETTE_KEYS.map((k) => (
             <div key={k}>
-              <p className="mb-2 text-[12px] capitalize text-text-secondary">{k}</p>
+              <p className="mb-2 text-[12px] capitalize text-gray-700">{k}</p>
               <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
                 <input
                   type="color"

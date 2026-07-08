@@ -29,7 +29,7 @@ export const examples: DesignExample[] = [
       },
       {
         tool: "setPalette",
-        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D" },
+        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D", secondary: "#F2A987", neutral: "#B8A492" },
       },
       {
         tool: "setGradientBackground",
@@ -133,7 +133,7 @@ export const examples: DesignExample[] = [
       },
       {
         tool: "setPalette",
-        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D" },
+        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D", secondary: "#F2A987", neutral: "#B8A492" },
       },
       {
         tool: "setSolidBackground",
@@ -215,7 +215,7 @@ export const examples: DesignExample[] = [
       },
       {
         tool: "setPalette",
-        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D" },
+        args: { background: "#FFF8F0", text: "#3D2C1E", accent: "#E8663D", secondary: "#F2A987", neutral: "#B8A492" },
       },
       {
         tool: "setGradientBackground",

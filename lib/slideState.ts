@@ -68,6 +68,9 @@ export function applyDesignEvent(
           background: data.background,
           text: data.text,
           accent: data.accent,
+          // Fall back for palettes emitted before the 5-role system.
+          secondary: data.secondary ?? data.accent,
+          neutral: data.neutral ?? data.text,
         },
         // The palette event may also carry brand fonts; apply them when present
         // (otherwise keep whatever fonts the slide already has).

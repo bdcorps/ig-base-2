@@ -282,9 +282,8 @@ export default function PostToInstagramModal({
                   {slides.map((_, i) => (
                     <span
                       key={i}
-                      className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                        i === index ? "bg-blue-500" : "bg-neutral-300"
-                      }`}
+                      className={`h-1.5 w-1.5 rounded-full transition-colors ${i === index ? "bg-blue-500" : "bg-neutral-300"
+                        }`}
                     />
                   ))}
                 </div>
@@ -358,7 +357,7 @@ export default function PostToInstagramModal({
                 className="w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-[13px] leading-relaxed text-neutral-900 outline-none transition focus:border-neutral-400"
               />
               <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-400">
-                <span>{captionError ? <span className="text-red-500">{captionError}</span> : "AI-drafted from your slides — edit freely."}</span>
+                {captionError && <span className="text-red-500">{captionError}</span>}
                 <span>{caption.length}/2200</span>
               </div>
             </div>

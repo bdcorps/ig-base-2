@@ -6,6 +6,7 @@ import {
   LEADERBOARD_BOARDS,
   type LeaderboardEntry,
 } from "@/lib/leaderboard";
+import { Flame } from "lucide-react";
 import { useMemo, useState } from "react";
 
 function Avatar({ entry, size = 40 }: { entry: LeaderboardEntry; size?: number }) {
@@ -21,11 +22,7 @@ function Avatar({ entry, size = 40 }: { entry: LeaderboardEntry; size?: number }
 }
 
 function FlameIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2c.5 3-1.5 4.5-3 6.5C7.4 10.6 6 12.4 6 15a6 6 0 0012 0c0-2.2-1-4-2.3-5.6-.4 1-1.2 1.7-2.2 1.9.6-2.2-.2-4.6-1.5-9.3z" />
-    </svg>
-  );
+  return <Flame className={className} aria-hidden />;
 }
 
 function rankBadge(rank: number) {

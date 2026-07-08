@@ -622,6 +622,9 @@ export function toDesignPalette(palette: PaletteCandidate): Palette {
     background: palette.backgroundColor,
     text: palette.primaryTextColor,
     accent: palette.accentColor,
+    secondary: palette.secondaryColor,
+    // First neutral is the most muted supporting tone; fall back to secondary.
+    neutral: palette.neutralColors[0] ?? palette.secondaryColor,
   };
 }
 

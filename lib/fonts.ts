@@ -92,19 +92,19 @@ export function googleFontsHref(families: string[]): string {
 export const PRESET_PALETTES: { name: string; palette: Palette }[] = [
   {
     name: "Soft Blue",
-    palette: { background: "#9db4d8", text: "#1f2a44", accent: "#e8743b" },
+    palette: { background: "#9db4d8", text: "#1f2a44", accent: "#e8743b", secondary: "#5a74a6", neutral: "#6f7f9e" },
   },
   {
     name: "Cream Editorial",
-    palette: { background: "#f4f1ea", text: "#211d17", accent: "#c2603a" },
+    palette: { background: "#f4f1ea", text: "#211d17", accent: "#c2603a", secondary: "#e0a58a", neutral: "#b8ad9c" },
   },
   {
     name: "Bold Dark",
-    palette: { background: "#0e0e0e", text: "#ffffff", accent: "#f0654a" },
+    palette: { background: "#0e0e0e", text: "#ffffff", accent: "#f0654a", secondary: "#f0a08f", neutral: "#5c5c5c" },
   },
   {
     name: "Mint Fresh",
-    palette: { background: "#0f5e4e", text: "#f3fff8", accent: "#ffd166" },
+    palette: { background: "#0f5e4e", text: "#f3fff8", accent: "#ffd166", secondary: "#5fbf94", neutral: "#4a7a68" },
   },
 ];
 

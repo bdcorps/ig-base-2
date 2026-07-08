@@ -3,12 +3,51 @@
 import GenerationPreviewCard from "@/components/GenerationPreviewCard";
 import PromptBox, { EXAMPLE_PROMPTS } from "@/components/PromptBox";
 import SignInModal from "@/components/SignInModal";
+import TemplateCard from "@/components/templates/TemplateCard";
+import TemplatePreviewSheet from "@/components/templates/TemplatePreviewSheet";
 import { useGenerations } from "@/context/GenerationsContext";
 import { useSession } from "@/lib/auth-client";
+import { googleFontsHref } from "@/lib/fonts";
+import {
+  TEMPLATE_GROUPS,
+  findTemplate,
+  templateFontFamilies,
+  type CarouselTemplate,
+} from "@/lib/templates";
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const PENDING_GENERATION_KEY = "pendingGeneration";
+
+const ROW_SIZE = 4;
+
+function StudioSection({
+  title,
+  href,
+  children,
+}: {
+  title: string;
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-12">
+      <div className="mb-4 flex items-baseline justify-between">
+        <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+        <Link
+          href={href}
+          className="group inline-flex items-center gap-1 text-md font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+        >
+          View all
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
@@ -24,11 +63,46 @@ export default function Home() {
   const [slideCount, setSlideCount] = useState(5);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<CarouselTemplate | null>(null);
+
+  const recentGenerations = generations.slice(0, ROW_SIZE);
+  const featuredTemplates = useMemo(
+    () =>
+      TEMPLATE_GROUPS.flatMap((group) =>
+        group.categories.flatMap((category) => category.templates),
+      ).slice(0, ROW_SIZE),
+    [],
+  );
+
+  // Load the Google Fonts used by the template covers so they render correctly.
+  useEffect(() => {
+    const id = "studio-template-google-fonts";
+    let link = document.getElementById(id) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = googleFontsHref(templateFontFamilies());
+  }, []);
 
   useEffect(() => {
     const id = importFromEditorSession();
     if (id) router.replace(`/design/${id}`);
   }, [importFromEditorSession, router]);
+
+  // Pre-select a template chosen from the Templates gallery (/?template=<id>).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("template");
+    if (id && findTemplate(id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the ?template param on mount
+      setTemplateId(id);
+      // Clear the query param so a refresh/back doesn't re-apply it.
+      router.replace("/");
+    }
+  }, [router]);
 
   // Resume a generation that was pending before the user signed in.
   useEffect(() => {
@@ -100,16 +174,40 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="mt-12 grid w-full max-w-5xl grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 mx-auto px-6">
-        {generations.map((gen) => (
-          <GenerationPreviewCard
-            key={gen.id}
-            generation={gen}
-            onOpen={() => router.push(`/design/${gen.id}`)}
-            onDelete={() => deleteGeneration(gen.id)}
-          />
-        ))}
+      <div className="mx-auto mt-12 w-full max-w-5xl px-6 pb-16">
+        {recentGenerations.length > 0 && (
+          <StudioSection title="Recents" href="/designs">
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+              {recentGenerations.map((gen) => (
+                <GenerationPreviewCard
+                  key={gen.id}
+                  generation={gen}
+                  onOpen={() => router.push(`/design/${gen.id}`)}
+                  onDelete={() => deleteGeneration(gen.id)}
+                />
+              ))}
+            </div>
+          </StudioSection>
+        )}
+
+        <StudioSection title="Templates" href="/templates">
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {featuredTemplates.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onSelect={setPreviewTemplate}
+                fluid
+              />
+            ))}
+          </div>
+        </StudioSection>
       </div>
+
+      <TemplatePreviewSheet
+        template={previewTemplate}
+        onClose={() => setPreviewTemplate(null)}
+      />
 
       <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} callbackURL="/" />
     </div>

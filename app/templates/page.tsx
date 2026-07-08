@@ -2,7 +2,6 @@
 
 import TemplatePreviewSheet from "@/components/templates/TemplatePreviewSheet";
 import TemplateSection from "@/components/templates/TemplateSection";
-import TopNav from "@/components/templates/TopNav";
 import { googleFontsHref } from "@/lib/fonts";
 import {
   TEMPLATE_GROUPS,
@@ -27,9 +26,7 @@ export default function TemplatesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900">
-      <TopNav />
-
+    <div className="min-h-full bg-white text-neutral-900">
       <div className="mx-auto max-w-7xl px-8 py-8">
         <header className="mb-10">
           <h1 className="text-3xl font-bold tracking-tight text-neutral-900">Templates</h1>

@@ -1,12 +1,18 @@
 "use client";
 
 import SlideRenderer from "@/components/SlideRenderer";
-import { buildCover, themeFor, type CarouselTemplate } from "@/lib/templates";
+import {
+  buildCover,
+  buildTemplateSlides,
+  themeFor,
+  type CarouselTemplate,
+} from "@/lib/templates";
 import { consumeDesignStream } from "@/lib/designStream";
 import { saveEditorSession } from "@/lib/editorSession";
 import type { SlideState } from "@/lib/slideState";
+import { ChevronLeft, ChevronRight, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface UploadedPhoto {
   id: string;
@@ -41,6 +47,13 @@ export default function TemplatePreviewSheet({
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  const previewSlides = useMemo(
+    () => (template ? buildTemplateSlides(template) : []),
+    [template],
+  );
+  const theme = useMemo(() => (template ? themeFor(template) : null), [template]);
 
   useEffect(() => {
     if (!template) return;
@@ -50,16 +63,27 @@ export default function TemplatePreviewSheet({
     setPrompt(contextPrompt.trim());
     setPhotos([]);
     setError(null);
+    setSlideIndex(0);
   }, [template, contextPrompt]);
+
+  const slideCount = previewSlides.length;
+  const goPrev = useCallback(() => {
+    setSlideIndex((i) => (i - 1 + slideCount) % slideCount);
+  }, [slideCount]);
+  const goNext = useCallback(() => {
+    setSlideIndex((i) => (i + 1) % slideCount);
+  }, [slideCount]);
 
   useEffect(() => {
     if (!template) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") goPrev();
+      else if (e.key === "ArrowRight") goNext();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [template, onClose]);
+  }, [template, onClose, goPrev, goNext]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -123,11 +147,12 @@ export default function TemplatePreviewSheet({
 
   function seeTemplate() {
     if (!template) return;
-    const slide: SlideState = {
-      design: buildCover(template),
-      theme: themeFor(template),
-    };
-    saveEditorSession({ prompt: template.prompt, slides: [slide] });
+    const t = themeFor(template);
+    const slides: SlideState[] = buildTemplateSlides(template).map((design) => ({
+      design,
+      theme: t,
+    }));
+    saveEditorSession({ prompt: template.prompt, slides });
     onClose();
     router.push("/");
   }
@@ -159,14 +184,61 @@ export default function TemplatePreviewSheet({
         </div>
 
         <div className="grid flex-1 overflow-hidden lg:grid-cols-[320px_1fr]">
-          <div className="flex items-center justify-center border-b border-neutral-200 bg-neutral-50 p-6 lg:border-b-0 lg:border-r">
-            <div className="overflow-hidden rounded-2xl ring-1 ring-black/5">
-              <SlideRenderer
-                design={buildCover(template)}
-                theme={themeFor(template)}
-                displayWidth={280}
-              />
+          <div className="flex flex-col items-center justify-center gap-4 border-b border-neutral-200 bg-neutral-50 p-6 lg:border-b-0 lg:border-r">
+            <div className="relative flex items-center">
+              {slideCount > 1 && (
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  aria-label="Previous slide"
+                  className="absolute -left-3 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-neutral-700 shadow-md ring-1 ring-black/5 hover:bg-neutral-100"
+                >
+                  <ChevronLeft size={18} strokeWidth={2.5} />
+                </button>
+              )}
+              <div className="overflow-hidden rounded-2xl ring-1 ring-black/5">
+                {theme && previewSlides[slideIndex] && (
+                  <SlideRenderer
+                    design={previewSlides[slideIndex]}
+                    theme={theme}
+                    displayWidth={280}
+                  />
+                )}
+              </div>
+              {slideCount > 1 && (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  aria-label="Next slide"
+                  className="absolute -right-3 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white text-neutral-700 shadow-md ring-1 ring-black/5 hover:bg-neutral-100"
+                >
+                  <ChevronRight size={18} strokeWidth={2.5} />
+                </button>
+              )}
             </div>
+
+            {slideCount > 1 && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  {previewSlides.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSlideIndex(i)}
+                      aria-label={`Go to slide ${i + 1}`}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === slideIndex
+                          ? "w-5 bg-neutral-800"
+                          : "w-1.5 bg-neutral-300 hover:bg-neutral-400"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-medium text-[#8E8E93]">
+                  {slideIndex + 1} of {slideCount}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col overflow-y-auto p-6">
@@ -285,17 +357,9 @@ export default function TemplatePreviewSheet({
 }
 
 function CloseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-  );
+  return <X size={18} strokeWidth={2} />;
 }
 
 function UploadIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-    </svg>
-  );
+  return <Upload size={22} strokeWidth={2} />;
 }

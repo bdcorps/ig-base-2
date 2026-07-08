@@ -103,22 +103,22 @@ export interface TemplateGroup {
 }
 
 export const PALETTES: Record<PaletteId, Palette> = {
-  cream: { background: "#f3efe6", text: "#211d17", accent: "#c2603a" },
-  dark: { background: "#141414", text: "#f6f3ee", accent: "#ff6b4a" },
-  navy: { background: "#1b2540", text: "#f3f1e9", accent: "#ff7a6b" },
-  forest: { background: "#14503e", text: "#f0fbf3", accent: "#ffd166" },
-  blue: { background: "#9db4d8", text: "#182142", accent: "#e8743b" },
-  blush: { background: "#f1d7cf", text: "#3a201a", accent: "#b8543c" },
-  sage: { background: "#cbd4c4", text: "#283022", accent: "#6f7d54" },
-  butter: { background: "#f6e6bf", text: "#2c2412", accent: "#d98324" },
-  mono: { background: "#ffffff", text: "#111111", accent: "#ff5436" },
-  plum: { background: "#2a1f3d", text: "#f4eefb", accent: "#c9a4ff" },
+  cream: { background: "#f3efe6", text: "#211d17", accent: "#c2603a", secondary: "#e0a58a", neutral: "#b8ad9c" },
+  dark: { background: "#141414", text: "#f6f3ee", accent: "#ff6b4a", secondary: "#ffb199", neutral: "#5c5852" },
+  navy: { background: "#1b2540", text: "#f3f1e9", accent: "#ff7a6b", secondary: "#7f9bd1", neutral: "#5a6580" },
+  forest: { background: "#14503e", text: "#f0fbf3", accent: "#ffd166", secondary: "#6fbf9a", neutral: "#4a7a68" },
+  blue: { background: "#9db4d8", text: "#182142", accent: "#e8743b", secondary: "#5a74a6", neutral: "#6f7f9e" },
+  blush: { background: "#f1d7cf", text: "#3a201a", accent: "#b8543c", secondary: "#d98f7a", neutral: "#b39a90" },
+  sage: { background: "#cbd4c4", text: "#283022", accent: "#6f7d54", secondary: "#9aa885", neutral: "#8b9382" },
+  butter: { background: "#f6e6bf", text: "#2c2412", accent: "#d98324", secondary: "#e6b667", neutral: "#b3a583" },
+  mono: { background: "#ffffff", text: "#111111", accent: "#ff5436", secondary: "#8a8a8a", neutral: "#d4d4d4" },
+  plum: { background: "#2a1f3d", text: "#f4eefb", accent: "#c9a4ff", secondary: "#8a6bb5", neutral: "#63577a" },
   // Soft, muted, earthy tones for the "aesthetic" covers.
-  linen: { background: "#e3d9c8", text: "#403832", accent: "#9c7a5b" },
-  olive: { background: "#b7bca3", text: "#2f3326", accent: "#67704a" },
-  fog: { background: "#aeb9c2", text: "#2c343b", accent: "#5f7682" },
-  clay: { background: "#d6bdae", text: "#43302a", accent: "#9a6450" },
-  mist: { background: "#c9cdc2", text: "#2d322b", accent: "#7c8a6f" },
+  linen: { background: "#e3d9c8", text: "#403832", accent: "#9c7a5b", secondary: "#c2a888", neutral: "#a89d8c" },
+  olive: { background: "#b7bca3", text: "#2f3326", accent: "#67704a", secondary: "#8f9670", neutral: "#868a76" },
+  fog: { background: "#aeb9c2", text: "#2c343b", accent: "#5f7682", secondary: "#8a9aa6", neutral: "#7f8890" },
+  clay: { background: "#d6bdae", text: "#43302a", accent: "#9a6450", secondary: "#c08e77", neutral: "#a8917f" },
+  mist: { background: "#c9cdc2", text: "#2d322b", accent: "#7c8a6f", secondary: "#a3ac97", neutral: "#8f958a" },
 };
 
 export const FONT_PAIRS: Record<FontPairId, { heading: string; body: string }> = {
@@ -531,6 +531,115 @@ export function buildCover(t: CarouselTemplate): SlideDesign {
 export function themeFor(t: CarouselTemplate): Theme {
   if (t.designTheme) return t.designTheme;
   return { palette: PALETTES[t.paletteId], fonts: FONT_PAIRS[t.fontPair] };
+}
+
+// ---------------------------------------------------------------------------
+// Full-carousel preview
+// ---------------------------------------------------------------------------
+//
+// A template only stores ONE real design (its cover); the remaining slides are
+// written by the generator from the user's prompt. So the gallery preview can't
+// show real content for slides 2..N. Instead we derive lightweight, on-theme
+// PLACEHOLDER slides — a numbered content layout plus a closing CTA — so the
+// user can flip through and get a feel for the carousel's rhythm and length.
+
+const PREVIEW_CONTENT_HEADINGS = [
+  "Start here",
+  "The real problem",
+  "What to do instead",
+  "A quick example",
+  "Make it a habit",
+  "Common mistakes",
+  "Keep this in mind",
+  "One more thing",
+];
+
+function buildPreviewContentSlide(index: number, total: number): SlideDesign {
+  const label = `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`;
+  const heading = PREVIEW_CONTENT_HEADINGS[(index - 1) % PREVIEW_CONTENT_HEADINGS.length];
+  const elements: SlideElement[] = [
+    txt({
+      x: 110,
+      y: 170,
+      width: 860,
+      content: label,
+      font: "body",
+      fontSize: 28,
+      fontWeight: 700,
+      uppercase: true,
+      letterSpacing: 6,
+      color: "accent",
+    }),
+    rect({ x: 113, y: 248, width: 72, height: 6, borderRadius: 3 }),
+    txt({
+      x: 110,
+      y: 320,
+      width: 870,
+      content: heading,
+      fontSize: 96,
+      fontWeight: 700,
+      lineHeight: 1.04,
+    }),
+    txt({
+      x: 110,
+      y: 660,
+      width: 830,
+      content:
+        "Your carousel copy appears here when you generate — written from your prompt, tone and photos.",
+      font: "body",
+      fontSize: 40,
+      fontWeight: 400,
+      lineHeight: 1.45,
+    }),
+  ];
+  return { background: { type: "solid", color: "background" }, elements, images: {} };
+}
+
+function buildPreviewCtaSlide(t: CarouselTemplate): SlideDesign {
+  const footer = t.footer?.trim();
+  const cta = footer && !/(swipe|→|read this)/i.test(footer) ? footer : "Follow for more";
+  const elements: SlideElement[] = [
+    txt({
+      x: 120,
+      y: 470,
+      width: 840,
+      content: "Your turn",
+      font: "body",
+      fontSize: 30,
+      fontWeight: 700,
+      align: "center",
+      uppercase: true,
+      letterSpacing: 6,
+      color: "accent",
+    }),
+    txt({
+      x: 110,
+      y: 560,
+      width: 860,
+      content: cta,
+      fontSize: autoSize(cta, 110, 60),
+      fontWeight: 700,
+      align: "center",
+      lineHeight: 1.05,
+    }),
+  ];
+  return { background: { type: "solid", color: "background" }, elements, images: {} };
+}
+
+/**
+ * Build the full slide set shown in the template preview: the real cover
+ * followed by placeholder content slides and a closing CTA, sized to the
+ * template's `slideCount`. Returns just the cover for single-slide templates.
+ */
+export function buildTemplateSlides(t: CarouselTemplate): SlideDesign[] {
+  const count = Math.max(1, t.slideCount);
+  const slides: SlideDesign[] = [buildCover(t)];
+  if (count <= 1) return slides;
+  for (let i = 1; i < count - 1; i++) {
+    slides.push(buildPreviewContentSlide(i, count));
+  }
+  slides.push(buildPreviewCtaSlide(t));
+  return slides;
 }
 
 export function templateFontFamilies(): string[] {

@@ -1107,6 +1107,10 @@ function textContentStyle(element: TextElementLike, theme: Theme): React.CSSProp
     fontFamily: `'${resolveFont(element.font, theme.fonts)}', sans-serif`,
     fontSize: element.fontSize,
     fontWeight: element.fontWeight,
+    // Never let the browser fake bold/italic for fonts that don't ship the
+    // requested weight (e.g. single-weight display fonts like Anton). Faux-bold
+    // synthesis smears the glyphs and makes previews look bad.
+    fontSynthesis: "none",
     color: resolveColor(element.color, theme.palette),
     textAlign: element.align,
     fontStyle: element.italic ? "italic" : "normal",
