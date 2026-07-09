@@ -879,7 +879,7 @@ export default function DesignWorkspace({ id }: Props) {
               onDragOver={onCanvasDragOver}
               onDrop={onCanvasDrop}
             >
-              <div className="flex flex-col items-center gap-10 px-8 py-6">
+              <div className="flex flex-col items-center gap-10 px-8 py-6 bg-gray-100">
                 {gen.slides.length > 0 ? (
                   gen.slides.map((slide, i) => {
                     const isActive = i === gen.activeSlideIndex;

@@ -1,14 +1,8 @@
 "use client";
 
 import {
-  getElementBounds,
-  snapPosition,
-  type SnapGuides,
-} from "@/lib/snapGuides";
-import { useEffect, useRef, useState } from "react";
-import {
-  CANVAS_WIDTH,
   CANVAS_HEIGHT,
+  CANVAS_WIDTH,
   resolveColor,
   resolveFont,
   type SlideDesign,
@@ -17,12 +11,18 @@ import {
   type StackElement,
   type Theme,
 } from "@/lib/schema";
-import { normalizeTextNewlines } from "@/lib/textContent";
 import {
   findShapeIndexAt,
   shapeBorderRadius,
   shapeClipPath,
 } from "@/lib/shapes";
+import {
+  getElementBounds,
+  snapPosition,
+  type SnapGuides,
+} from "@/lib/snapGuides";
+import { normalizeTextNewlines } from "@/lib/textContent";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   design: SlideDesign;
@@ -82,6 +82,7 @@ export default function SlideRenderer({
   return (
     <div
       data-slide-export=""
+      className="border-[0.75px] border-grey-700"
       style={{
         width: displayWidth,
         height: displayHeight,
@@ -582,9 +583,9 @@ function ElementView({
 
   const hoverHandlers = editable
     ? {
-        onMouseEnter: () => setHovered(true),
-        onMouseLeave: () => setHovered(false),
-      }
+      onMouseEnter: () => setHovered(true),
+      onMouseLeave: () => setHovered(false),
+    }
     : {};
 
   const base: React.CSSProperties = {
@@ -610,22 +611,22 @@ function ElementView({
   const interaction =
     editable && !stackEditing
       ? {
-          ...hoverHandlers,
-          onContextMenu,
-          onPointerDown,
-          onPointerMove: onPointerMoveWithPending,
-          onPointerUp: onPointerUpWithPending,
-          onPointerCancel: onPointerUpWithPending,
-        }
+        ...hoverHandlers,
+        onContextMenu,
+        onPointerDown,
+        onPointerMove: onPointerMoveWithPending,
+        onPointerUp: onPointerUpWithPending,
+        onPointerCancel: onPointerUpWithPending,
+      }
       : editable && stackEditing
         ? {
-            ...hoverHandlers,
-            onPointerDown: (e: React.PointerEvent) => {
-              e.stopPropagation();
-              onSelect?.({ elementIndex: index });
-            },
-            onContextMenu,
-          }
+          ...hoverHandlers,
+          onPointerDown: (e: React.PointerEvent) => {
+            e.stopPropagation();
+            onSelect?.({ elementIndex: index });
+          },
+          onContextMenu,
+        }
         : {};
 
   const showResizeHandle = editable && selected && !stackEditing;
@@ -642,47 +643,47 @@ function ElementView({
     drag.current =
       contain && containRect && naturalSize
         ? {
-            mode: "resize",
-            corner,
-            sx: e.clientX,
-            sy: e.clientY,
-            ox: element.x + containRect.left,
-            oy: element.y + containRect.top,
-            ow: containRect.width,
-            oh: containRect.height,
-            containResize: true,
-            aspectRatio: naturalSize.w / naturalSize.h,
-          }
+          mode: "resize",
+          corner,
+          sx: e.clientX,
+          sy: e.clientY,
+          ox: element.x + containRect.left,
+          oy: element.y + containRect.top,
+          ow: containRect.width,
+          oh: containRect.height,
+          containResize: true,
+          aspectRatio: naturalSize.w / naturalSize.h,
+        }
         : {
-            mode: "resize",
-            corner,
-            sx: e.clientX,
-            sy: e.clientY,
-            ox: element.x,
-            oy: element.y,
-            ow: element.width,
-            oh: bounds.height,
-            aspectRatio:
-              element.kind === "image" && naturalSize
-                ? naturalSize.w / naturalSize.h
-                : undefined,
-          };
+          mode: "resize",
+          corner,
+          sx: e.clientX,
+          sy: e.clientY,
+          ox: element.x,
+          oy: element.y,
+          ow: element.width,
+          oh: bounds.height,
+          aspectRatio:
+            element.kind === "image" && naturalSize
+              ? naturalSize.w / naturalSize.h
+              : undefined,
+        };
   };
 
   const renderCornerHandles = (contain: boolean, rect?: { left: number; top: number; width: number; height: number }) => {
     const positions: Record<Corner, React.CSSProperties> = rect
       ? {
-          nw: { left: rect.left - 16, top: rect.top - 16 },
-          ne: { left: rect.left + rect.width - 16, top: rect.top - 16 },
-          sw: { left: rect.left - 16, top: rect.top + rect.height - 16 },
-          se: { left: rect.left + rect.width - 16, top: rect.top + rect.height - 16 },
-        }
+        nw: { left: rect.left - 16, top: rect.top - 16 },
+        ne: { left: rect.left + rect.width - 16, top: rect.top - 16 },
+        sw: { left: rect.left - 16, top: rect.top + rect.height - 16 },
+        se: { left: rect.left + rect.width - 16, top: rect.top + rect.height - 16 },
+      }
       : {
-          nw: { left: -16, top: -16 },
-          ne: { right: -16, top: -16 },
-          sw: { left: -16, bottom: -16 },
-          se: { right: -16, bottom: -16 },
-        };
+        nw: { left: -16, top: -16 },
+        ne: { right: -16, top: -16 },
+        sw: { left: -16, bottom: -16 },
+        se: { right: -16, bottom: -16 },
+      };
     return (Object.keys(positions) as Corner[]).map((corner) => (
       <ResizeHandleDot
         key={corner}
@@ -703,12 +704,12 @@ function ElementView({
         onDoubleClick={
           editable
             ? (e) => {
-                e.stopPropagation();
-                pendingDrag.current = null;
-                drag.current = null;
-                setDragging(false);
-                onEnterStackEdit?.(index);
-              }
+              e.stopPropagation();
+              pendingDrag.current = null;
+              drag.current = null;
+              setDragging(false);
+              onEnterStackEdit?.(index);
+            }
             : undefined
         }
         style={{
@@ -929,25 +930,25 @@ function StackChildView({
 
   const hoverHandlers = editable
     ? {
-        onMouseEnter: () => setHovered(true),
-        onMouseLeave: () => setHovered(false),
-      }
+      onMouseEnter: () => setHovered(true),
+      onMouseLeave: () => setHovered(false),
+    }
     : {};
 
   const interaction = editable
     ? {
-        ...hoverHandlers,
-        onPointerDown: (e: React.PointerEvent) => {
-          e.stopPropagation();
-          wasSelectedRef.current = selected;
-          if (!selected) onSelect();
-        },
-        onPointerUp: () => {
-          // Second click on an already-selected text child enters edit mode.
-          if (wasSelectedRef.current && child.kind === "text") setEditing(true);
-        },
-        onDoubleClick: (e: React.MouseEvent) => e.stopPropagation(),
-      }
+      ...hoverHandlers,
+      onPointerDown: (e: React.PointerEvent) => {
+        e.stopPropagation();
+        wasSelectedRef.current = selected;
+        if (!selected) onSelect();
+      },
+      onPointerUp: () => {
+        // Second click on an already-selected text child enters edit mode.
+        if (wasSelectedRef.current && child.kind === "text") setEditing(true);
+      },
+      onDoubleClick: (e: React.MouseEvent) => e.stopPropagation(),
+    }
     : {};
 
   const resizeHandle =
@@ -1010,9 +1011,9 @@ function StackChildView({
           position: "absolute",
           ...(useImageOverlaySelection && containRect
             ? {
-                left: containRect.left + containRect.width - 12,
-                top: containRect.top + containRect.height - 12,
-              }
+              left: containRect.left + containRect.width - 12,
+              top: containRect.top + containRect.height - 12,
+            }
             : { right: -12, bottom: -12 }),
           width: 24,
           height: 24,
@@ -1143,16 +1144,16 @@ function TextContent({
     <div style={textContentStyle(element, theme)}>
       {hasSegments
         ? element.segments!.map((seg, i) => (
-            <span
-              key={i}
-              style={{
-                color: resolveColor(seg.color, theme.palette),
-                fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
-              }}
-            >
-              {normalizeTextNewlines(seg.text)}
-            </span>
-          ))
+          <span
+            key={i}
+            style={{
+              color: resolveColor(seg.color, theme.palette),
+              fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
+            }}
+          >
+            {normalizeTextNewlines(seg.text)}
+          </span>
+        ))
         : normalizeTextNewlines(element.content)}
     </div>
   );
@@ -1267,16 +1268,16 @@ function EditableTextContent({
     >
       {element.segments && element.segments.length > 0
         ? element.segments.map((seg, i) => (
-            <span
-              key={i}
-              style={{
-                color: resolveColor(seg.color, theme.palette),
-                fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
-              }}
-            >
-              {normalizeTextNewlines(seg.text)}
-            </span>
-          ))
+          <span
+            key={i}
+            style={{
+              color: resolveColor(seg.color, theme.palette),
+              fontStyle: seg.italic == null ? undefined : seg.italic ? "italic" : "normal",
+            }}
+          >
+            {normalizeTextNewlines(seg.text)}
+          </span>
+        ))
         : displayContent}
     </div>
   );
